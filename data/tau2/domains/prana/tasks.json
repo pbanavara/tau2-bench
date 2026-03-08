@@ -1,0 +1,1110 @@
+[
+  {
+    "id": "0",
+    "description": {
+      "purpose": "Retrieve single lab value — easy",
+      "relevant_policies": null,
+      "notes": "Patient P001 has all fields present"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator requesting a lab value from the administrative agent.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the HbA1c value for patient P001 from PatientDB.",
+        "known_info": "Patient ID is P001.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "0_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "1",
+    "description": {
+      "purpose": "Retrieve multiple lab values — easy",
+      "relevant_policies": null,
+      "notes": "Agent must query GFR and creatinine in addition to HbA1c for P002"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator requesting multiple lab values.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve HbA1c, GFR, and creatinine for patient P002 from PatientDB.",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "1_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "1_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "1_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "2",
+    "description": {
+      "purpose": "Missing field — easy",
+      "relevant_policies": null,
+      "notes": "P003 has no HbA1c in PatientDB — agent must report NOT_FOUND"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator requesting a lab value.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the HbA1c value for patient P003 from PatientDB.",
+        "known_info": "Patient ID is P003.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "2_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P003"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "3",
+    "description": {
+      "purpose": "Cross-datastore query — medium",
+      "relevant_policies": "OPTN Policy 18.1",
+      "notes": "Agent must query WaitlistDB for dialysis_start_date and cpra, not PatientDB"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator verifying waitlist data.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the dialysis start date and CPRA for patient P001.",
+        "known_info": "Patient ID is P001.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "3_0",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "3_1",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "4",
+    "description": {
+      "purpose": "Implicit field inference — hard",
+      "relevant_policies": "OPTN Policy 18.1.2",
+      "notes": "P001 has lisinopril in PharmacyDB — agent must infer hypertension per OPTN-18.1.2"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator preparing a KARS report for patient P001.",
+        "domain": "prana",
+        "reason_for_call": "Check whether patient P001 has any antihypertensive medications in PharmacyDB and determine if hypertension should be recorded per OPTN policy.",
+        "known_info": "Patient ID is P001.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "4_0",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "5",
+    "description": {
+      "purpose": "Single sensitization field — easy",
+      "relevant_policies": null,
+      "notes": "PRA (panel reactive antibody) for P001 from PatientDB"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator checking sensitization data.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the PRA value for patient P001 from PatientDB.",
+        "known_info": "Patient ID is P001.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "5_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "pra", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "6",
+    "description": {
+      "purpose": "Single waitlist field — easy",
+      "relevant_policies": "OPTN Policy 18.1",
+      "notes": "Agent must know to query WaitlistDB not PatientDB for registration status"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator checking a patient's registration.",
+        "domain": "prana",
+        "reason_for_call": "What is the current waitlist status for patient P002?",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "6_0",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "7",
+    "description": {
+      "purpose": "Inactive waitlist patient — medium",
+      "relevant_policies": "OPTN Policy 18.1",
+      "notes": "P003 is inactive on waitlist and has no dialysis_start_date — both facts must be retrieved"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator auditing a patient's waitlist record.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the waitlist status and dialysis start date for patient P003.",
+        "known_info": "Patient ID is P003.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "7_0",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "7_1",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P003"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "8",
+    "description": {
+      "purpose": "Medical urgency exception — medium",
+      "relevant_policies": "OPTN Policy 18.1",
+      "notes": "P002 has medical_urgency exception in WaitlistDB — agent must retrieve exceptions and cpra"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator reviewing priority exceptions.",
+        "domain": "prana",
+        "reason_for_call": "Check whether patient P002 has any active exceptions on their waitlist record, and retrieve their CPRA.",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "8_0",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "exceptions", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "8_1",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "9",
+    "description": {
+      "purpose": "Partial PatientDB record with null field — medium",
+      "relevant_policies": null,
+      "notes": "P003 has null hba1c — agent must query all four lab fields and handle NOT_FOUND correctly"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator completing a lab panel for a patient file.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve all available lab values (HbA1c, GFR, creatinine, blood type) for patient P003 from PatientDB.",
+        "known_info": "Patient ID is P003.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "9_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "9_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "9_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "9_3",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "blood_type", "patient_id": "P003"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "10",
+    "description": {
+      "purpose": "Full WaitlistDB record — medium",
+      "relevant_policies": "OPTN Policy 18.1",
+      "notes": "Agent must retrieve three waitlist fields for P001"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator completing the waitlist section of a KARS report.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve dialysis start date, CPRA, and waitlist status for patient P001.",
+        "known_info": "Patient ID is P001.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "10_0",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "10_1",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "10_2",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "11",
+    "description": {
+      "purpose": "Coded diagnoses from ClinicalNotesDB — hard",
+      "relevant_policies": "OPTN Policy 18.1 Section 4",
+      "notes": "P002 has hypertension and diabetic_nephropathy coded in ClinicalNotesDB"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator abstracting diagnoses from physician notes.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the coded diagnoses for patient P002 from ClinicalNotesDB.",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "11_0",
+          "name": "query_db",
+          "arguments": {"target": "ClinicalNotesDB", "field": "coded_diagnoses", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "12",
+    "description": {
+      "purpose": "Nephrotoxic medication check — hard",
+      "relevant_policies": "OPTN Policy 18.1 Section 4",
+      "notes": "P003 has tacrolimus (immunosuppressant/nephrotoxic) in PharmacyDB — agent must identify and flag it"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator screening medications for nephrotoxic agents.",
+        "domain": "prana",
+        "reason_for_call": "Check whether patient P003 has any nephrotoxic medications in PharmacyDB that should be flagged in their transplant record.",
+        "known_info": "Patient ID is P003.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "12_0",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P003"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "13",
+    "description": {
+      "purpose": "Hypertension cross-verification P002 — hard",
+      "relevant_policies": "OPTN Policy 18.1.2",
+      "notes": "P002 has amlodipine in PharmacyDB AND coded hypertension in ClinicalNotesDB — both sources must be checked"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator verifying hypertension status per OPTN-18.1.2.",
+        "domain": "prana",
+        "reason_for_call": "Verify hypertension status for patient P002 by checking both PharmacyDB for antihypertensives and ClinicalNotesDB for coded diagnoses. Per OPTN Policy 18.1.2, hypertension must be recorded if antihypertensive medications are present.",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "13_0",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "13_1",
+          "name": "query_db",
+          "arguments": {"target": "ClinicalNotesDB", "field": "coded_diagnoses", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "14",
+    "description": {
+      "purpose": "Diabetes inference from PharmacyDB and ClinicalNotesDB — hard",
+      "relevant_policies": "OPTN Policy 18.1 Section 4",
+      "notes": "P002 has insulin glargine in PharmacyDB and diabetic_nephropathy in ClinicalNotesDB"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator assessing diabetes status for a KARS report.",
+        "domain": "prana",
+        "reason_for_call": "Determine whether patient P002 has diabetes by checking PharmacyDB for insulin or diabetes medications, and ClinicalNotesDB for coded diagnoses.",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "14_0",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "14_1",
+          "name": "query_db",
+          "arguments": {"target": "ClinicalNotesDB", "field": "coded_diagnoses", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "15",
+    "description": {
+      "purpose": "Full KARS report P001 — very hard",
+      "relevant_policies": "OPTN Policy 18.1, 18.1.2",
+      "notes": "All 7 KARS fields across PatientDB and WaitlistDB, plus PharmacyDB check per OPTN-18.1.2"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator compiling a complete KARS report.",
+        "domain": "prana",
+        "reason_for_call": "Compile all required fields for a full KARS/SRTR report for patient P001. Required fields: blood_type, hba1c, gfr, creatinine (PatientDB), dialysis_start_date, cpra, waitlist_status (WaitlistDB). Also check PharmacyDB for medications requiring policy-mandated reporting per OPTN-18.1.2.",
+        "known_info": "Patient ID is P001.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "15_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "blood_type", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_3",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_4",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_5",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_6",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "15_7",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "16",
+    "description": {
+      "purpose": "Full KARS report P002 with comorbidity inference — very hard",
+      "relevant_policies": "OPTN Policy 18.1, 18.1.2",
+      "notes": "P002 has antihypertensives, insulin, coded diagnoses, and medical_urgency exception — all 4 datastores required"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator compiling a complete KARS report for a complex patient.",
+        "domain": "prana",
+        "reason_for_call": "Compile all required fields for a full KARS/SRTR report for patient P002. Gather labs from PatientDB, waitlist data from WaitlistDB (including any exceptions), medications from PharmacyDB (check for antihypertensives and diabetes medications per OPTN-18.1.2), and coded diagnoses from ClinicalNotesDB.",
+        "known_info": "Patient ID is P002.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "16_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "blood_type", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_3",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_4",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_5",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_6",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_7",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "exceptions", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_8",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "16_9",
+          "name": "query_db",
+          "arguments": {"target": "ClinicalNotesDB", "field": "coded_diagnoses", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "18",
+    "description": {
+      "purpose": "Temporal staleness detection P001 — hard",
+      "relevant_policies": "KARS Recency Policy",
+      "notes": "T1 record from 2025-11-07 is stale. Agent must identify and re-query only time-sensitive fields (hba1c, gfr, creatinine). blood_type is stable — do not re-query."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator preparing to file a KARS report. Today's date is 2026-03-07. KARS requires that hba1c, gfr, and creatinine be recorded within 90 days of the filing date. blood_type is stable and has no recency requirement.",
+        "domain": "prana",
+        "reason_for_call": "Prepare patient P001's KARS report for filing on 2026-03-07. Retrieve the current lab values from PatientDB — the system will return full measurement history with timestamps. Assess recency and anomalies per OPTN policy before proceeding.",
+        "known_info": "Patient ID is P001. Filing date is 2026-03-07. KARS requires hba1c, gfr, creatinine within 90 days. blood_type is stable.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": {
+      "t1_record": {"hba1c": 7.2, "gfr": 18.5, "creatinine": 3.8, "blood_type": "A+", "recorded_at": "2025-11-07"}
+    },
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "18_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "18_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "18_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "19",
+    "description": {
+      "purpose": "Temporal staleness detection P002 — hard",
+      "relevant_policies": "KARS Recency Policy",
+      "notes": "P002 T1 values are stale. Agent must re-query time-sensitive fields. Values have worsened significantly (GFR 11→8.3, HbA1c 9.1→10.2)."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator preparing to file a KARS report. Today's date is 2026-03-07. KARS requires that hba1c, gfr, and creatinine be recorded within 90 days of the filing date. blood_type is stable and has no recency requirement.",
+        "domain": "prana",
+        "reason_for_call": "Prepare patient P002's KARS report for filing on 2026-03-07. Retrieve lab values from PatientDB — the system returns full measurement history with timestamps. Assess recency and anomalies per OPTN policy before proceeding.",
+        "known_info": "Patient ID is P002. Filing date is 2026-03-07. KARS requires hba1c, gfr, creatinine within 90 days. blood_type is stable.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": {
+      "t1_record": {"hba1c": 9.1, "gfr": 11.0, "creatinine": 5.2, "blood_type": "O-", "recorded_at": "2025-11-07"}
+    },
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "19_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "19_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "19_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "20",
+    "description": {
+      "purpose": "Temporal staleness P003 with null hba1c — hard",
+      "relevant_policies": "KARS Recency Policy",
+      "notes": "P003 T1 record has null hba1c. Agent must still attempt re-query for hba1c even though it was null, and re-query gfr and creatinine. blood_type is stable."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator preparing to file a KARS report. Today's date is 2026-03-07. KARS requires that hba1c, gfr, and creatinine be recorded within 90 days of the filing date.",
+        "domain": "prana",
+        "reason_for_call": "Prepare patient P003's KARS report for filing on 2026-03-07. Retrieve lab values from PatientDB — the system returns full measurement history with timestamps. Assess recency, check if hba1c has ever been recorded, and identify any anomalies per OPTN policy.",
+        "known_info": "Patient ID is P003. Filing date is 2026-03-07. KARS requires hba1c, gfr, creatinine within 90 days. blood_type is stable.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": {
+      "t1_record": {"hba1c": null, "gfr": 22.3, "creatinine": 3.1, "blood_type": "B+", "recorded_at": "2025-11-07"}
+    },
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "20_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "20_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "20_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P003"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "21",
+    "description": {
+      "purpose": "Temporal full KARS P001 — very hard",
+      "relevant_policies": "KARS Recency Policy, OPTN Policy 18.1, 18.1.2",
+      "notes": "Full KARS with temporal reasoning: re-query stale labs, skip stable blood_type, still need waitlist fields and PharmacyDB check. Requires combining recency reasoning with cross-datastore gathering."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator filing a complete KARS report. Today's date is 2026-03-07. KARS recency policy: hba1c, gfr, creatinine must be within 90 days; blood_type is stable.",
+        "domain": "prana",
+        "reason_for_call": "Patient P001 has a partial T1 record from 2025-11-07: hba1c=7.2, gfr=18.5, creatinine=3.8, blood_type=A+. For a complete KARS filing you also need: dialysis_start_date, cpra, and waitlist_status from WaitlistDB, and a PharmacyDB check per OPTN-18.1.2. Re-query stale time-sensitive lab fields, then gather the missing waitlist and pharmacy data.",
+        "known_info": "Patient ID is P001. Filing date 2026-03-07. Stale fields needing re-query: hba1c, gfr, creatinine. Stable (no re-query needed): blood_type. Missing entirely: dialysis_start_date, cpra, status (WaitlistDB), drug_name (PharmacyDB).",
+        "unknown_info": null
+      }
+    },
+    "initial_state": {
+      "t1_record": {"hba1c": 7.2, "gfr": 18.5, "creatinine": 3.8, "blood_type": "A+", "recorded_at": "2025-11-07"}
+    },
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "21_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "21_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "21_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "21_3",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "21_4",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "21_5",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P001"},
+          "info": null
+        },
+        {
+          "action_id": "21_6",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P001"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "22",
+    "description": {
+      "purpose": "Temporal full KARS P002 with comorbidity inference — very hard",
+      "relevant_policies": "KARS Recency Policy, OPTN Policy 18.1, 18.1.2",
+      "notes": "Most complex task: stale T1 record, re-query labs, all 4 datastores, hypertension/diabetes inference. P002 values have worsened significantly — GFR now 8.3 (critical)."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator filing a complete KARS report. Today's date is 2026-03-07. KARS recency policy: hba1c, gfr, creatinine must be within 90 days; blood_type is stable.",
+        "domain": "prana",
+        "reason_for_call": "Patient P002 has a partial T1 record from 2025-11-07: hba1c=9.1, gfr=11.0, creatinine=5.2, blood_type=O-. Lab values are stale and must be refreshed. You also need: waitlist data (WaitlistDB including exceptions), medications (PharmacyDB — check for antihypertensives and diabetes drugs per OPTN-18.1.2), and diagnoses (ClinicalNotesDB). Re-query stale labs first, then gather all remaining data.",
+        "known_info": "Patient ID is P002. Filing date 2026-03-07. Stale fields: hba1c, gfr, creatinine. Stable: blood_type. Missing: all WaitlistDB fields, PharmacyDB, ClinicalNotesDB.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": {
+      "t1_record": {"hba1c": 9.1, "gfr": 11.0, "creatinine": 5.2, "blood_type": "O-", "recorded_at": "2025-11-07"}
+    },
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "22_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_3",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_4",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "cpra", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_5",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_6",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "exceptions", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_7",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "22_8",
+          "name": "query_db",
+          "arguments": {"target": "ClinicalNotesDB", "field": "coded_diagnoses", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "17",
+    "description": {
+      "purpose": "Full KARS report P003 with missing fields and inactive status — very hard",
+      "relevant_policies": "OPTN Policy 18.1",
+      "notes": "P003 has null hba1c, null dialysis_start_date, inactive waitlist status — agent must surface all NOT_FOUND values accurately"
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator compiling a KARS report for a patient with incomplete records.",
+        "domain": "prana",
+        "reason_for_call": "Compile all required KARS fields for patient P003. Some fields may be missing — retrieve them all and report accurately. Check PatientDB for labs, WaitlistDB for registration data, PharmacyDB for medications, and ClinicalNotesDB for diagnoses.",
+        "known_info": "Patient ID is P003.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "17_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_3",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "blood_type", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_4",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "dialysis_start_date", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_5",
+          "name": "query_db",
+          "arguments": {"target": "WaitlistDB", "field": "status", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_6",
+          "name": "query_db",
+          "arguments": {"target": "PharmacyDB", "field": "drug_name", "patient_id": "P003"},
+          "info": null
+        },
+        {
+          "action_id": "17_7",
+          "name": "query_db",
+          "arguments": {"target": "ClinicalNotesDB", "field": "coded_diagnoses", "patient_id": "P003"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "23",
+    "description": {
+      "purpose": "Anomaly detection P002 GFR — very hard",
+      "relevant_policies": "KARS Recency Policy, OPTN Clinical Integrity Policy",
+      "notes": "P002 GFR dropped from 8.3 to 5.1 in 6 days (38.6% change). Agent must detect the anomaly and communicate a confirmatory test is needed before filing. Do NOT file."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator reviewing lab results before filing a KARS report. Today's date is 2026-03-07. Apply all relevant KARS and OPTN clinical integrity policies when assessing whether the values are suitable for filing.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve the GFR and creatinine measurement history for patient P002 from PatientDB and assess whether the values are suitable for filing.",
+        "known_info": "Patient ID is P002. Filing date is 2026-03-07.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "23_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "23_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "24",
+    "description": {
+      "purpose": "Anomaly detection P002 full clinical picture — very hard",
+      "relevant_policies": "KARS Recency Policy, OPTN Clinical Integrity Policy",
+      "notes": "P002 has anomalous GFR and creatinine. Agent must query all labs, detect the anomalies, communicate clearly to the coordinator what was found and what action is needed, and NOT file the report."
+    },
+    "user_scenario": {
+      "persona": null,
+      "instructions": {
+        "task_instructions": "You are a transplant coordinator performing a full pre-filing lab review for patient P002. Today's date is 2026-03-07. Apply all relevant KARS and OPTN clinical integrity policies when reviewing labs.",
+        "domain": "prana",
+        "reason_for_call": "Retrieve all current lab values (hba1c, gfr, creatinine) for patient P002 from PatientDB. Review the full measurement history for recency and data integrity. Communicate your findings and recommended next steps to the coordinator.",
+        "known_info": "Patient ID is P002. Filing date is 2026-03-07.",
+        "unknown_info": null
+      }
+    },
+    "initial_state": null,
+    "evaluation_criteria": {
+      "reward_basis": ["DB", "COMMUNICATE", "ACTION"],
+      "actions": [
+        {
+          "action_id": "24_0",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "hba1c", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "24_1",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "gfr", "patient_id": "P002"},
+          "info": null
+        },
+        {
+          "action_id": "24_2",
+          "name": "query_db",
+          "arguments": {"target": "PatientDB", "field": "creatinine", "patient_id": "P002"},
+          "info": null
+        }
+      ]
+    }
+  }
+]

@@ -15,6 +15,9 @@ from tau2.domains.airline.environment import (
     get_tasks_split as airline_domain_get_tasks_split,
 )
 from tau2.domains.mock.environment import get_environment as mock_domain_get_environment
+from tau2.domains.prana.environment import get_environment as prana_domain_get_environment
+from tau2.domains.prana.environment import get_tasks as prana_domain_get_tasks
+from tau2.domains.prana.environment import get_tasks_split as prana_domain_get_tasks_split
 from tau2.domains.mock.environment import get_tasks as mock_domain_get_tasks
 from tau2.domains.retail.environment import (
     get_environment as retail_domain_get_environment,
@@ -211,6 +214,13 @@ try:
     registry.register_agent(LLMSoloAgent, "llm_agent_solo")
 
     registry.register_domain(mock_domain_get_environment, "mock")
+
+    registry.register_domain(prana_domain_get_environment, "prana")
+    registry.register_tasks(
+        prana_domain_get_tasks,
+        "prana",
+        get_task_splits=prana_domain_get_tasks_split,
+    )
     registry.register_tasks(mock_domain_get_tasks, "mock")
 
     registry.register_domain(airline_domain_get_environment, "airline")

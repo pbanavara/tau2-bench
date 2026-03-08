@@ -60,8 +60,88 @@ Domains are:
 - `airline`
 - `retail`
 - `telecom`
+- `prana` ← kidney transplant administration benchmark (see below)
 
 All the information that an agent developer needs to build an agent for a domain can be accessed through the domain's API docs. See [View domain documentation](#view-domain-documentation) for more details.
+
+---
+
+## 🏥 τ-PRANA Domain
+
+**τ-PRANA** is a new benchmark domain for evaluating clinical administrative agents on kidney transplant workflows. It tests whether a model can navigate fragmented datastores, apply OPTN policy, reason about temporal data recency, and detect lab measurement anomalies.
+
+### Task Splits
+
+| Split | Tasks | Difficulty | Description |
+|-------|-------|------------|-------------|
+| `easy` | 5 | Easy | Single field retrieval from one datastore |
+| `medium` | 5 | Medium | Multi-field or cross-datastore retrieval |
+| `hard` | 5 | Hard | Policy inference (OPTN-18.1.2), ClinicalNotesDB |
+| `very_hard` | 3 | Very Hard | Full KARS report across all 4 datastores |
+| `temporal` | 5 | Hard–Very Hard | Staleness detection — agent must re-query time-sensitive fields |
+| `anomaly` | 2 | Very Hard | Anomaly detection — flag conflicting measurements before filing |
+| `base` | 25 | All | Complete task set |
+
+### What Makes τ-PRANA Hard
+
+**Four isolated datastores** — data never volunteered; agent must know where to look:
+- `PatientDB` — labs (HbA1c, GFR, creatinine, blood type) with full measurement history
+- `WaitlistDB` — OPTN waitlist registration, dialysis date, CPRA, exceptions
+- `PharmacyDB` — active medications; indirect evidence of diagnoses (OPTN-18.1.2)
+- `ClinicalNotesDB` — physician notes with coded diagnoses
+
+**Temporal reasoning** — lab values carry timestamps. The agent must:
+1. Identify measurements outside the 90-day KARS recency window
+2. Re-query only stale time-sensitive fields (`hba1c`, `gfr`, `creatinine`)
+3. Leave stable fields (`blood_type`) untouched — redundant queries are penalized
+
+**Anomaly detection** — PatientDB returns full measurement history. Per OPTN Clinical Integrity Policy, if two measurements of the same field within 14 days differ by >25%, the agent must flag the anomaly and recommend a confirmatory test rather than filing.
+
+### Benchmark Results (GPT-4.1, action completeness enforced)
+
+| Split | Pass@1 |
+|-------|--------|
+| easy | 1.000 |
+| medium | 1.000 |
+| hard | 1.000 |
+| very_hard | 1.000 |
+| temporal | 0.600 |
+| anomaly | 1.000* |
+
+*Anomaly tasks pass because the tool response includes the `⚠️ ANOMALY` flag directly. Removing the flag and requiring the model to compute anomalies from raw history is a planned harder variant.
+
+**Failure pattern on temporal tasks**: frontier models correctly re-query stale lab fields but consistently miss `PharmacyDB/drug_name` (OPTN-18.1.2 policy-mandated check) in full cross-datastore temporal tasks.
+
+### Running τ-PRANA
+
+```bash
+# All tasks
+tau2 run --domain prana --agent-llm gpt-4.1 --task-split-name base --max-concurrency 1
+
+# Temporal only
+tau2 run --domain prana --agent-llm gpt-4.1 --task-split-name temporal --max-concurrency 1
+
+# Anomaly detection only
+tau2 run --domain prana --agent-llm gpt-4.1 --task-split-name anomaly --max-concurrency 1
+```
+
+### Domain Files
+
+```
+src/tau2/domains/prana/
+├── data_model.py      # PranaDB, Patient (with LabResult history), ClinicalNote, Medication, WaitlistEntry
+├── tools.py           # query_db — returns timestamped history + anomaly flags
+├── environment.py     # get_environment(), get_tasks()
+└── utils.py           # Path constants
+
+data/tau2/domains/prana/
+├── db.json            # 3 patients × 4 datastores; time-sensitive fields as LabResult[]
+├── policy.md          # OPTN policy, KARS recency rules, anomaly detection thresholds
+├── tasks.json         # 25 tasks with reward_basis: [DB, COMMUNICATE, ACTION]
+└── split_tasks.json   # 7 named splits
+```
+
+---
 
 ## Installation
 

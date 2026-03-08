@@ -1,0 +1,1810 @@
+{
+  "patient_db": {
+    "P001": {
+      "patient_id": "P001",
+      "name": "Jane Doe",
+      "age": 52,
+      "blood_type": "A+",
+      "hba1c": [
+        {
+          "value": 7.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.9,
+          "recorded_at": "2026-03-07"
+        }
+      ],
+      "gfr": [
+        {
+          "value": 18.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 12.1,
+          "recorded_at": "2026-03-07"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.7,
+          "recorded_at": "2026-03-07"
+        }
+      ],
+      "pra": 12
+    },
+    "P002": {
+      "patient_id": "P002",
+      "name": "John Smith",
+      "age": 61,
+      "blood_type": "O-",
+      "hba1c": [
+        {
+          "value": 9.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "gfr": [
+        {
+          "value": 11.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.3,
+          "recorded_at": "2026-02-28"
+        },
+        {
+          "value": 5.1,
+          "recorded_at": "2026-03-06"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 5.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.1,
+          "recorded_at": "2026-02-28"
+        },
+        {
+          "value": 7.8,
+          "recorded_at": "2026-03-06"
+        }
+      ],
+      "pra": 45
+    },
+    "P003": {
+      "patient_id": "P003",
+      "name": "Maria Garcia",
+      "age": 47,
+      "blood_type": "B+",
+      "hba1c": [],
+      "gfr": [
+        {
+          "value": 22.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 19.8,
+          "recorded_at": "2026-03-07"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.4,
+          "recorded_at": "2026-03-07"
+        }
+      ],
+      "pra": 8
+    },
+    "P004": {
+      "patient_id": "P004",
+      "name": "Michelle Moore",
+      "age": 28,
+      "blood_type": "A+",
+      "pra": 2.4,
+      "gfr": [
+        {
+          "value": 19.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 15.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.6,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P005": {
+      "patient_id": "P005",
+      "name": "Kevin Flores",
+      "age": 51,
+      "blood_type": "O+",
+      "pra": 27.5,
+      "gfr": [
+        {
+          "value": 8.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.7,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P006": {
+      "patient_id": "P006",
+      "name": "Richard Wright",
+      "age": 43,
+      "blood_type": "O+",
+      "pra": 50.9,
+      "gfr": [
+        {
+          "value": 32.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 24.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 2.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.1,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P007": {
+      "patient_id": "P007",
+      "name": "Daniel Wilson",
+      "age": 69,
+      "blood_type": "B+",
+      "pra": 18.3,
+      "gfr": [
+        {
+          "value": 47.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 41.0,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 2.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P008": {
+      "patient_id": "P008",
+      "name": "Richard Baker",
+      "age": 55,
+      "blood_type": "A+",
+      "pra": 46.7,
+      "gfr": [
+        {
+          "value": 36.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 27.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.3,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P009": {
+      "patient_id": "P009",
+      "name": "Timothy Taylor",
+      "age": 60,
+      "blood_type": "O+",
+      "pra": 70.8,
+      "gfr": [
+        {
+          "value": 30.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 20.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.0,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.9,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P010": {
+      "patient_id": "P010",
+      "name": "Margaret Martin",
+      "age": 43,
+      "blood_type": "O+",
+      "pra": 12.9,
+      "gfr": [
+        {
+          "value": 15.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 4.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P011": {
+      "patient_id": "P011",
+      "name": "Joseph Rivera",
+      "age": 47,
+      "blood_type": "O+",
+      "pra": 38.0,
+      "gfr": [
+        {
+          "value": 60.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 30.5,
+          "recorded_at": "2026-03-01"
+        },
+        {
+          "value": 55.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 2.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.2,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P012": {
+      "patient_id": "P012",
+      "name": "Betty Jones",
+      "age": 60,
+      "blood_type": "O+",
+      "pra": 44.3,
+      "gfr": [
+        {
+          "value": 34.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 24.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P013": {
+      "patient_id": "P013",
+      "name": "Robert Brown",
+      "age": 53,
+      "blood_type": "B+",
+      "pra": 15.2,
+      "gfr": [
+        {
+          "value": 59.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 49.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 10.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.6,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P014": {
+      "patient_id": "P014",
+      "name": "Ronald Thomas",
+      "age": 38,
+      "blood_type": "O-",
+      "pra": 6.0,
+      "gfr": [
+        {
+          "value": 39.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 26.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 2.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 7.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.4,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P015": {
+      "patient_id": "P015",
+      "name": "Joseph Jackson",
+      "age": 41,
+      "blood_type": "A-",
+      "pra": 62.8,
+      "gfr": [
+        {
+          "value": 27.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 21.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [],
+      "hba1c": []
+    },
+    "P016": {
+      "patient_id": "P016",
+      "name": "Patricia Torres",
+      "age": 43,
+      "blood_type": "O-",
+      "pra": 12.6,
+      "gfr": [
+        {
+          "value": 16.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.6,
+          "recorded_at": "2026-03-01"
+        },
+        {
+          "value": 10.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 4.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P017": {
+      "patient_id": "P017",
+      "name": "James Robinson",
+      "age": 67,
+      "blood_type": "A+",
+      "pra": 25.1,
+      "gfr": [
+        {
+          "value": 19.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 15.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 2.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P018": {
+      "patient_id": "P018",
+      "name": "Nancy Nelson",
+      "age": 34,
+      "blood_type": "O+",
+      "pra": 12.6,
+      "gfr": [
+        {
+          "value": 21.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 14.0,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 4.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.3,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 7.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.0,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P019": {
+      "patient_id": "P019",
+      "name": "James Perez",
+      "age": 36,
+      "blood_type": "O+",
+      "pra": 50.7,
+      "gfr": [
+        {
+          "value": 7.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 9.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.5,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P020": {
+      "patient_id": "P020",
+      "name": "David Thompson",
+      "age": 41,
+      "blood_type": "O-",
+      "pra": 43.6,
+      "gfr": [
+        {
+          "value": 28.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 18.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P021": {
+      "patient_id": "P021",
+      "name": "Brian Mitchell",
+      "age": 43,
+      "blood_type": "O+",
+      "pra": 13.0,
+      "gfr": [
+        {
+          "value": 36.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 24.3,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 9.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.3,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P022": {
+      "patient_id": "P022",
+      "name": "Rebecca Moore",
+      "age": 50,
+      "blood_type": "A+",
+      "pra": 24.4,
+      "gfr": [
+        {
+          "value": 39.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 26.0,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 2.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P023": {
+      "patient_id": "P023",
+      "name": "Joshua Gonzalez",
+      "age": 44,
+      "blood_type": "A-",
+      "pra": 21.2,
+      "gfr": [
+        {
+          "value": 24.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.3,
+          "recorded_at": "2026-03-01"
+        },
+        {
+          "value": 20.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.0,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 10.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.7,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P024": {
+      "patient_id": "P024",
+      "name": "Paul Martin",
+      "age": 70,
+      "blood_type": "O+",
+      "pra": 34.5,
+      "gfr": [
+        {
+          "value": 60.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 42.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P025": {
+      "patient_id": "P025",
+      "name": "Donald Baker",
+      "age": 41,
+      "blood_type": "A+",
+      "pra": 24.1,
+      "gfr": [
+        {
+          "value": 28.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 20.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 7.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.8,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P026": {
+      "patient_id": "P026",
+      "name": "Steven Flores",
+      "age": 32,
+      "blood_type": "A+",
+      "pra": 7.5,
+      "gfr": [
+        {
+          "value": 41.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 26.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P027": {
+      "patient_id": "P027",
+      "name": "Dorothy Brown",
+      "age": 63,
+      "blood_type": "A+",
+      "pra": 71.4,
+      "gfr": [
+        {
+          "value": 42.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 27.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P028": {
+      "patient_id": "P028",
+      "name": "Stephanie Walker",
+      "age": 56,
+      "blood_type": "A-",
+      "pra": 71.3,
+      "gfr": [
+        {
+          "value": 60.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 54.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P029": {
+      "patient_id": "P029",
+      "name": "Deborah Wilson",
+      "age": 32,
+      "blood_type": "O+",
+      "pra": 22.9,
+      "gfr": [
+        {
+          "value": 23.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 18.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P030": {
+      "patient_id": "P030",
+      "name": "Andrew Mitchell",
+      "age": 62,
+      "blood_type": "O+",
+      "pra": 70.5,
+      "gfr": [
+        {
+          "value": 27.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.8,
+          "recorded_at": "2026-03-01"
+        },
+        {
+          "value": 19.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 10.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.1,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P031": {
+      "patient_id": "P031",
+      "name": "Ashley Rodriguez",
+      "age": 57,
+      "blood_type": "B+",
+      "pra": 67.2,
+      "gfr": [
+        {
+          "value": 20.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 13.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 6.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.2,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P032": {
+      "patient_id": "P032",
+      "name": "David Carter",
+      "age": 29,
+      "blood_type": "A+",
+      "pra": 66.8,
+      "gfr": [
+        {
+          "value": 51.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 37.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.4,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P033": {
+      "patient_id": "P033",
+      "name": "Maria Martin",
+      "age": 64,
+      "blood_type": "A+",
+      "pra": 61.4,
+      "gfr": [
+        {
+          "value": 8.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.2,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P034": {
+      "patient_id": "P034",
+      "name": "Ashley Nelson",
+      "age": 51,
+      "blood_type": "O+",
+      "pra": 61.8,
+      "gfr": [
+        {
+          "value": 43.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 28.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P035": {
+      "patient_id": "P035",
+      "name": "Timothy Nguyen",
+      "age": 45,
+      "blood_type": "A+",
+      "pra": 12.2,
+      "gfr": [
+        {
+          "value": 60.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 48.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 0.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.2,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P036": {
+      "patient_id": "P036",
+      "name": "Donna Smith",
+      "age": 61,
+      "blood_type": "O+",
+      "pra": 39.5,
+      "gfr": [
+        {
+          "value": 23.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 18.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 7.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.0,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P037": {
+      "patient_id": "P037",
+      "name": "Stephanie Scott",
+      "age": 49,
+      "blood_type": "B+",
+      "pra": 7.4,
+      "gfr": [
+        {
+          "value": 7.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.2,
+          "recorded_at": "2026-03-01"
+        },
+        {
+          "value": 5.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 6.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 9.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.7,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P038": {
+      "patient_id": "P038",
+      "name": "Christopher Anderson",
+      "age": 51,
+      "blood_type": "A+",
+      "pra": 15.3,
+      "gfr": [
+        {
+          "value": 31.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 21.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.1,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.3,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 9.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.5,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P039": {
+      "patient_id": "P039",
+      "name": "Steven Davis",
+      "age": 32,
+      "blood_type": "O-",
+      "pra": 39.3,
+      "gfr": [
+        {
+          "value": 46.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 30.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 1.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 10.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.9,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P040": {
+      "patient_id": "P040",
+      "name": "Ashley Martin",
+      "age": 64,
+      "blood_type": "O+",
+      "pra": 61.2,
+      "gfr": [
+        {
+          "value": 22.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 16.0,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.3,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P041": {
+      "patient_id": "P041",
+      "name": "Deborah Jackson",
+      "age": 72,
+      "blood_type": "O+",
+      "pra": 13.9,
+      "gfr": [
+        {
+          "value": 27.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 23.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.4,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P042": {
+      "patient_id": "P042",
+      "name": "Christopher Lewis",
+      "age": 35,
+      "blood_type": "O+",
+      "pra": 18.0,
+      "gfr": [
+        {
+          "value": 6.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 9.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.9,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P043": {
+      "patient_id": "P043",
+      "name": "Lisa Torres",
+      "age": 30,
+      "blood_type": "B+",
+      "pra": 48.3,
+      "gfr": [
+        {
+          "value": 22.4,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 19.3,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.2,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.5,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P044": {
+      "patient_id": "P044",
+      "name": "Sandra Carter",
+      "age": 63,
+      "blood_type": "A-",
+      "pra": 37.6,
+      "gfr": [
+        {
+          "value": 8.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 6.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 4.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 7.3,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 6.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.0,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P045": {
+      "patient_id": "P045",
+      "name": "Lisa Scott",
+      "age": 36,
+      "blood_type": null,
+      "pra": 69.5,
+      "gfr": [
+        {
+          "value": 44.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 32.6,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 0.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 1.5,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 9.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.7,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P046": {
+      "patient_id": "P046",
+      "name": "Deborah Jackson",
+      "age": 60,
+      "blood_type": "A+",
+      "pra": 44.2,
+      "gfr": [
+        {
+          "value": 10.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 6.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 8.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 11.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 11.9,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P047": {
+      "patient_id": "P047",
+      "name": "Timothy Martin",
+      "age": 65,
+      "blood_type": "B+",
+      "pra": 10.9,
+      "gfr": [
+        {
+          "value": 24.6,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 20.8,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 3.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.0,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P048": {
+      "patient_id": "P048",
+      "name": "Anthony Harris",
+      "age": 70,
+      "blood_type": "A-",
+      "pra": 69.6,
+      "gfr": [
+        {
+          "value": 38.5,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 24.2,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 2.9,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": [
+        {
+          "value": 8.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 9.2,
+          "recorded_at": "2026-03-01"
+        }
+      ]
+    },
+    "P049": {
+      "patient_id": "P049",
+      "name": "Michael Walker",
+      "age": 44,
+      "blood_type": "O+",
+      "pra": 67.6,
+      "gfr": [
+        {
+          "value": 13.0,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 10.9,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 4.7,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 5.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    },
+    "P050": {
+      "patient_id": "P050",
+      "name": "Thomas Mitchell",
+      "age": 33,
+      "blood_type": "O+",
+      "pra": 57.5,
+      "gfr": [
+        {
+          "value": 36.8,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 24.7,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "creatinine": [
+        {
+          "value": 3.3,
+          "recorded_at": "2025-11-07"
+        },
+        {
+          "value": 4.1,
+          "recorded_at": "2026-03-01"
+        }
+      ],
+      "hba1c": []
+    }
+  },
+  "clinical_notes_db": {
+    "P001": [
+      {
+        "note_id": "N001",
+        "patient_id": "P001",
+        "author": "Dr. Patel",
+        "date": "2025-11-10",
+        "text": "Patient on lisinopril 10mg for BP control. Blood pressure well managed.",
+        "coded_diagnoses": []
+      }
+    ],
+    "P002": [
+      {
+        "note_id": "N002",
+        "patient_id": "P002",
+        "author": "Dr. Kim",
+        "date": "2025-12-01",
+        "text": "Diabetic nephropathy confirmed. Patient has hypertension, on amlodipine.",
+        "coded_diagnoses": [
+          "hypertension",
+          "diabetic_nephropathy"
+        ]
+      }
+    ],
+    "P003": [
+      {
+        "note_id": "N003",
+        "patient_id": "P003",
+        "author": "Dr. Nguyen",
+        "date": "2026-01-15",
+        "text": "Routine follow-up. No new diagnoses. Stable on current regimen.",
+        "coded_diagnoses": []
+      }
+    ]
+  },
+  "pharmacy_db": {
+    "P001": [
+      {
+        "med_id": "M001",
+        "patient_id": "P001",
+        "drug_name": "lisinopril",
+        "dosage": "10mg daily",
+        "indication": "blood pressure control"
+      }
+    ],
+    "P002": [
+      {
+        "med_id": "M002",
+        "patient_id": "P002",
+        "drug_name": "amlodipine",
+        "dosage": "5mg daily",
+        "indication": "hypertension"
+      },
+      {
+        "med_id": "M003",
+        "patient_id": "P002",
+        "drug_name": "insulin glargine",
+        "dosage": "20 units nightly",
+        "indication": "type 2 diabetes"
+      }
+    ],
+    "P003": [
+      {
+        "med_id": "M004",
+        "patient_id": "P003",
+        "drug_name": "tacrolimus",
+        "dosage": "2mg twice daily",
+        "indication": null
+      }
+    ]
+  },
+  "waitlist_db": {
+    "P001": {
+      "patient_id": "P001",
+      "registration_date": "2024-03-15",
+      "status": "active",
+      "dialysis_start_date": "2023-09-01",
+      "cpra": 12,
+      "exceptions": []
+    },
+    "P002": {
+      "patient_id": "P002",
+      "registration_date": "2023-11-20",
+      "status": "active",
+      "dialysis_start_date": "2023-06-10",
+      "cpra": 45,
+      "exceptions": [
+        "medical_urgency"
+      ]
+    },
+    "P003": {
+      "patient_id": "P003",
+      "registration_date": "2025-01-08",
+      "status": "inactive",
+      "dialysis_start_date": null,
+      "cpra": 8,
+      "exceptions": []
+    }
+  }
+}
