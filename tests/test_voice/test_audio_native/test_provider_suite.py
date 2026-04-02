@@ -188,27 +188,16 @@ def _make_order_tool() -> Tool:
     """Create the get_order_status tool used in tool-call tests."""
 
     def get_order_status(order_id: str) -> str:
-        """Get the status of a customer order."""
+        """Get the status of a customer order by order ID.
+
+        Use this whenever the user asks about an order.
+
+        Args:
+            order_id: The order ID to look up.
+        """
         return f"Order {order_id} is shipped and arriving tomorrow."
 
-    return Tool(
-        name="get_order_status",
-        description=(
-            "Get the status of a customer order by order ID. "
-            "Use this whenever the user asks about an order."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "order_id": {
-                    "type": "string",
-                    "description": "The order ID to look up",
-                },
-            },
-            "required": ["order_id"],
-        },
-        func=get_order_status,
-    )
+    return Tool(get_order_status)
 
 
 # =============================================================================
