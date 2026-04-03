@@ -323,3 +323,173 @@ class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
     def set_seed(self, seed: int):
         # MedGemma endpoint doesn't support seeding
         logger.warning("MedGemmaAgent does not support seeding — ignoring.")
+
+
+# ---------------------------------------------------------------------------
+# Gemma 4 Agent — native tool calling via VertexAIModelGarden.bind_tools()
+# ---------------------------------------------------------------------------
+
+
+class Gemma4Agent(LocalAgent[MedGemmaAgentState]):
+    """
+    tau2 agent backed by Gemma 4 on a Vertex AI Model Garden endpoint.
+
+    Gemma 4 supports native OpenAI-style tool calling. This agent uses
+    VertexAIModelGarden.bind_tools() so tool calls come back as structured
+    AIMessage.tool_calls rather than text JSON that needs parsing.
+
+    Environment variables required:
+      GEMMA4_PROJECT   — GCP project ID
+      GEMMA4_ENDPOINT  — Vertex AI endpoint ID
+      GEMMA4_LOCATION  — region (default: us-west1)
+
+    Optional:
+      GEMMA4_TEMPERATURE  (default 0.0)
+      GEMMA4_MAX_TOKENS   (default 2048)
+    """
+
+    def __init__(
+        self,
+        tools: List[Tool],
+        domain_policy: str,
+        llm: Optional[str] = None,
+        llm_args: Optional[dict] = None,
+    ):
+        super().__init__(tools=tools, domain_policy=domain_policy)
+
+        project = os.environ["GEMMA4_PROJECT"]
+        location = os.environ.get("GEMMA4_LOCATION", "us-west1")
+        endpoint_id = os.environ["GEMMA4_ENDPOINT"]
+        self._temperature = float(os.environ.get("GEMMA4_TEMPERATURE", "0.0"))
+        self._max_tokens = int(os.environ.get("GEMMA4_MAX_TOKENS", "2048"))
+
+        try:
+            from langchain_google_vertexai import VertexAIModelGarden
+        except ImportError as e:
+            raise ImportError(
+                "langchain-google-vertexai is required for Gemma4Agent. "
+                "Install it with: pip install langchain-google-vertexai"
+            ) from e
+
+        base_llm = VertexAIModelGarden(
+            project=project,
+            location=location,
+            endpoint_id=endpoint_id,
+            allowed_model_args=["temperature", "max_tokens"],
+        )
+
+        # Convert tau2 Tool objects to LangChain-compatible tool schemas
+        lc_tools = [t.openai_schema for t in tools]
+        self._llm = base_llm.bind_tools(lc_tools)
+
+        logger.info(
+            f"Gemma4Agent initialised — project={project} location={location} "
+            f"endpoint={endpoint_id} tools={[t.name for t in tools]}"
+        )
+
+    @property
+    def _system_prompt(self) -> str:
+        return SYSTEM_PROMPT_TEMPLATE.format(
+            agent_instruction=MEDGEMMA_AGENT_INSTRUCTION,
+            domain_policy=self.domain_policy,
+        )
+
+    def _to_lc_messages(self, messages: list) -> list:
+        """Convert tau2 messages to LangChain message objects."""
+        try:
+            from langchain_core.messages import (
+                AIMessage as LCAIMessage,
+                HumanMessage,
+                SystemMessage as LCSystemMessage,
+                ToolMessage as LCToolMessage,
+            )
+        except ImportError as e:
+            raise ImportError("langchain-core is required") from e
+
+        lc_msgs = [LCSystemMessage(content=self._system_prompt)]
+        for msg in messages:
+            if isinstance(msg, UserMessage):
+                lc_msgs.append(HumanMessage(content=msg.content or ""))
+            elif isinstance(msg, AssistantMessage):
+                if msg.is_tool_call():
+                    lc_msgs.append(LCAIMessage(
+                        content=msg.content or "",
+                        tool_calls=[
+                            {"id": tc.id, "name": tc.name, "args": tc.arguments}
+                            for tc in (msg.tool_calls or [])
+                        ],
+                    ))
+                else:
+                    lc_msgs.append(LCAIMessage(content=msg.content or ""))
+            elif isinstance(msg, ToolMessage):
+                lc_msgs.append(LCToolMessage(
+                    content=msg.content or "",
+                    tool_call_id=msg.id,
+                ))
+            elif isinstance(msg, MultiToolMessage):
+                for tm in msg.tool_messages:
+                    lc_msgs.append(LCToolMessage(
+                        content=tm.content or "",
+                        tool_call_id=tm.id,
+                    ))
+        return lc_msgs
+
+    def _from_lc_response(self, response) -> AssistantMessage:
+        """Convert a LangChain AIMessage back to a tau2 AssistantMessage."""
+        tool_calls = None
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_calls = [
+                ToolCall(
+                    id=tc.get("id", f"g4-{uuid.uuid4().hex[:8]}"),
+                    name=tc["name"],
+                    arguments=tc.get("args", {}),
+                    requestor="assistant",
+                )
+                for tc in response.tool_calls
+            ]
+        content = getattr(response, "content", None) or None
+        # LangChain returns empty string when there's a tool call
+        if tool_calls and not content:
+            content = None
+        return AssistantMessage(
+            role="assistant",
+            content=content,
+            tool_calls=tool_calls,
+        )
+
+    def get_init_state(
+        self, message_history: Optional[list] = None
+    ) -> MedGemmaAgentState:
+        if message_history is None:
+            message_history = []
+        assert all(is_valid_agent_history_message(m) for m in message_history), (
+            "Message history must contain only AssistantMessage, UserMessage, or ToolMessage."
+        )
+        return MedGemmaAgentState(system_messages=[], messages=list(message_history))
+
+    def generate_next_message(
+        self,
+        message: ValidAgentInputMessage,
+        state: MedGemmaAgentState,
+    ) -> tuple[AssistantMessage, MedGemmaAgentState]:
+        if isinstance(message, MultiToolMessage):
+            state.messages.extend(message.tool_messages)
+        else:
+            state.messages.append(message)
+
+        lc_messages = self._to_lc_messages(state.messages)
+        logger.debug(f"Gemma4Agent sending {len(lc_messages)} messages")
+
+        response = self._llm.invoke(
+            lc_messages,
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+        )
+        logger.debug(f"Gemma4 response: {str(response)[:300]!r}")
+
+        assistant_message = self._from_lc_response(response)
+        state.messages.append(assistant_message)
+        return assistant_message, state
+
+    def set_seed(self, seed: int):
+        logger.warning("Gemma4Agent does not support seeding — ignoring.")

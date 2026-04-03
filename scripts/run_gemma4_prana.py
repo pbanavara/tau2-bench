@@ -25,6 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from tau2.agent.medgemma_agent import Gemma4Agent
+from tau2.registry import registry
 from tau2.run import get_tasks, run_tasks
 
 # Model name as registered in the Vertex AI endpoint
@@ -141,18 +143,27 @@ def main():
     # LiteLLM openai/ provider: model string is "openai/<model_name>"
     model_str = f"openai/{args.model_name}"
 
-    print(f"Base URL: {base_url}")
-    print(f"Model:    {model_str}")
-    print("Fetching gcloud access token...")
-    token = get_gcloud_token()
-    print(f"Token acquired (first 20 chars): {token[:20]}...")
+    # Gemma4Agent reads GEMMA4_* env vars directly — no token needed here
+    registry.register_agent(Gemma4Agent, "gemma4_agent")
 
     if args.test:
-        ok = probe_endpoint(base_url, token, model_str)
-        if not ok:
+        # Quick smoke test: invoke the agent on a trivial single-turn task
+        print("\n--- Probe: single LangChain invoke (no tools) ---")
+        try:
+            from langchain_google_vertexai import VertexAIModelGarden
+            llm = VertexAIModelGarden(
+                project=project,
+                location=region,
+                endpoint_id=endpoint,
+                allowed_model_args=["temperature", "max_tokens"],
+            )
+            r = llm.invoke("Say hello in one word.", max_tokens=16, temperature=0.0)
+            print(f"  OK: {str(r)[:100]!r}")
+        except Exception as e:
+            print(f"  FAIL ({type(e).__name__}): {str(e)[:300]}")
             print("\nEndpoint probe failed — fix connectivity before running the benchmark.")
             sys.exit(1)
-        print("\nProbe passed. Proceeding with benchmark...\n")
+        print("Probe passed. Proceeding with benchmark...\n")
 
     tasks = get_tasks(task_set_name="prana", task_split_name=args.split)
     print(f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}")
@@ -165,15 +176,11 @@ def main():
     results = run_tasks(
         domain="prana",
         tasks=tasks,
-        agent="llm_agent",
+        agent="gemma4_agent",
         user="user_simulator",
-        llm_agent=model_str,
+        llm_agent=None,
         llm_user="gpt-4o",
-        llm_args_agent={
-            "temperature": 0.0,
-            "api_key": token,
-            "base_url": base_url,
-        },
+        llm_args_agent={},
         llm_args_user={"temperature": 0.7},
         num_trials=args.num_trials,
         max_concurrency=1,
