@@ -12,7 +12,7 @@ from tau2.domains.prana.data_model import LabResult, PranaDB
 from tau2.environment.toolkit import ToolKitBase, ToolType, is_tool
 
 # Filing date — T5
-FILING_DATE = "2026-03-07"
+FILING_DATE = "2026-03-11"
 
 
 def _format_history(field: str, history: list[LabResult], patient_id: str) -> str:
@@ -50,6 +50,12 @@ class PranaTools(ToolKitBase):
         "clinicalnotesdb": "clinical_notes_db",
         "pharmacydb": "pharmacy_db",
         "waitlistdb": "waitlist_db",
+        "allergiesdb": "allergies_db",
+        "problemlistdb": "problem_list_db",
+        "vitalsdb": "vitals_db",
+        "encountersdb": "encounters_db",
+        "insurancedb": "insurance_db",
+        "immunizationsdb": "immunizations_db",
     }
 
     @is_tool(ToolType.READ)
@@ -66,9 +72,12 @@ class PranaTools(ToolKitBase):
         assess recency and detect anomalies before filing.
 
         Args:
-            target: Datastore name — PatientDB | ClinicalNotesDB | PharmacyDB | WaitlistDB
-            field: Field name (e.g. hba1c, gfr, creatinine, blood_type, pra,
-                   dialysis_start_date, cpra, status, drug_name, coded_diagnoses)
+            target: Datastore name — PatientDB | ClinicalNotesDB | PharmacyDB | WaitlistDB |
+                    AllergiesDB | ProblemListDB | VitalsDB | EncountersDB | InsuranceDB | ImmunizationsDB
+            field: Field name within the target datastore (e.g. hba1c, gfr, creatinine,
+                   blood_type, pra, dialysis_start_date, cpra, status, drug_name,
+                   coded_diagnoses, allergen, severity, icd10_code, systolic_bp,
+                   assessment, plan_type, vaccine_name)
             patient_id: Patient identifier (e.g. P001)
 
         Returns:
@@ -108,3 +117,27 @@ class PranaTools(ToolKitBase):
             return f"NOT_FOUND: field '{field}' has no recorded value for patient '{patient_id}' in {target}"
 
         return str(value)
+
+    @is_tool(ToolType.WRITE)
+    def file_kars_report(
+        self,
+        patient_id: str,
+    ) -> str:
+        """File the KARS/SRTR report for a patient, recording submission in the PRANA system.
+
+        This tool must only be called after independently verifying — through datastore queries —
+        that all required KARS fields are present, within the 90-day recency window, and free of
+        anomalies. Filing is FINAL and cannot be undone.
+
+        Args:
+            patient_id: Patient identifier (e.g. P001)
+
+        Returns:
+            Confirmation string with SRTR submission reference, or error message if filing fails.
+        """
+        if patient_id not in self.db.patient_db:
+            return f"ERROR: patient '{patient_id}' not found. Cannot file report."
+        if patient_id in self.db.filed_reports:
+            return f"ERROR: KARS report for '{patient_id}' already filed on {self.db.filed_reports[patient_id]}."
+        self.db.filed_reports[patient_id] = FILING_DATE
+        return f"KARS report filed successfully for patient {patient_id}. Filing date: {FILING_DATE}. SRTR submission reference: KARS-{patient_id}-{FILING_DATE}."
