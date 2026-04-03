@@ -7,7 +7,8 @@ uses the standard LLMAgent via LiteLLM's openai/ provider — no custom agent.
 Usage:
     export GEMMA4_PROJECT=your-project-id
     export GEMMA4_ENDPOINT=your-endpoint-id          # numeric endpoint ID
-    export GEMMA4_BASE_URL=https://mg-endpoint-33010b69-43fa-4153-b971-710825b46aee.us-west1-1032906547691.prediction.vertexai.goog/v1
+    export GEMMA4_LOCATION=us-west1                  # default
+    # GEMMA4_BASE_URL can override the full base URL if needed
 
     conda activate openenv
     python scripts/run_gemma4_prana.py [--split adversarial]
@@ -56,22 +57,102 @@ def parse_args():
     parser.add_argument(
         "--num-trials", type=int, default=1,
     )
+    parser.add_argument(
+        "--model-name", default=GEMMA4_MODEL_NAME,
+        help=f"Model name sent in the request body (default: {GEMMA4_MODEL_NAME}). "
+             "Try 'gemma-4-31B-it' or 'default' if the server rejects the full name.",
+    )
+    parser.add_argument(
+        "--test", action="store_true",
+        help="Run a quick connectivity probe (no tools, then with tools) before the benchmark.",
+    )
     return parser.parse_args()
+
+
+def probe_endpoint(base_url: str, token: str, model_str: str) -> bool:
+    """Send a minimal request to verify the endpoint works before running the full benchmark."""
+    import litellm
+
+    print("\n--- Probe 1: plain text, no tools ---")
+    try:
+        r = litellm.completion(
+            model=model_str,
+            messages=[{"role": "user", "content": "Reply with one word: hello"}],
+            api_key=token,
+            base_url=base_url,
+            max_tokens=16,
+            temperature=0.0,
+            num_retries=1,
+        )
+        print(f"  OK: {r.choices[0].message.content!r}")
+    except Exception as e:
+        print(f"  FAIL ({type(e).__name__}): {str(e)[:200]}")
+        return False
+
+    print("\n--- Probe 2: single tool definition ---")
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "ping",
+            "description": "Test tool",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        }
+    }]
+    try:
+        r = litellm.completion(
+            model=model_str,
+            messages=[{"role": "user", "content": "Call the ping tool."}],
+            tools=tools,
+            tool_choice="auto",
+            api_key=token,
+            base_url=base_url,
+            max_tokens=64,
+            temperature=0.0,
+            num_retries=1,
+        )
+        msg = r.choices[0].message
+        if msg.tool_calls:
+            print(f"  OK: tool call → {msg.tool_calls[0].function.name}")
+        else:
+            print(f"  OK (text): {msg.content!r}")
+    except Exception as e:
+        print(f"  FAIL ({type(e).__name__}): {str(e)[:200]}")
+        return False
+
+    return True
 
 
 def main():
     args = parse_args()
 
+    # Vertex AI OpenAI-compatible path:
+    #   {host}/v1/projects/{PROJECT}/locations/{REGION}/endpoints/{ENDPOINT}
+    # LiteLLM (openai/ provider) appends /chat/completions to this base URL.
+    host = "https://mg-endpoint-33010b69-43fa-4153-b971-710825b46aee.us-west1-1032906547691.prediction.vertexai.goog"
+    project = os.environ["GEMMA4_PROJECT"]
+    endpoint = os.environ["GEMMA4_ENDPOINT"]
+    region = os.environ.get("GEMMA4_LOCATION", "us-west1")
+
     base_url = os.environ.get(
         "GEMMA4_BASE_URL",
-        "https://mg-endpoint-33010b69-43fa-4153-b971-710825b46aee.us-west1-1032906547691.prediction.vertexai.goog/v1",
+        f"{host}/v1/projects/{project}/locations/{region}/endpoints/{endpoint}",
     )
-    # LiteLLM openai/ provider: model string is "openai/<model_name>"
-    model_str = f"openai/{GEMMA4_MODEL_NAME}"
 
+    # LiteLLM openai/ provider: model string is "openai/<model_name>"
+    model_str = f"openai/{args.model_name}"
+
+    print(f"Base URL: {base_url}")
+    print(f"Model:    {model_str}")
     print("Fetching gcloud access token...")
     token = get_gcloud_token()
     print(f"Token acquired (first 20 chars): {token[:20]}...")
+
+    if args.test:
+        ok = probe_endpoint(base_url, token, model_str)
+        if not ok:
+            print("\nEndpoint probe failed — fix connectivity before running the benchmark.")
+            sys.exit(1)
+        print("\nProbe passed. Proceeding with benchmark...\n")
 
     tasks = get_tasks(task_set_name="prana", task_split_name=args.split)
     print(f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}")
