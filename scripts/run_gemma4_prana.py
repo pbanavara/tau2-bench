@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from tau2.run import get_tasks, run_tasks
 
-GEMMA4_MODEL_NAME = "google/gemma-4-E4B-it"
+GEMMA4_MODEL_NAME = "google/gemma-4-31B-it"
 
 VALID_SPLITS = [
     "adversarial", "time_phased", "anomaly", "temporal",
