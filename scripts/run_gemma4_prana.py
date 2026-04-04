@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from tau2.run import get_tasks, run_tasks
 
-GEMMA4_MODEL_NAME = "google/gemma-4-31B-it"
+GEMMA4_MODEL_NAME = "google/gemma-4-E4B-it"
 
 VALID_SPLITS = [
     "adversarial", "time_phased", "anomaly", "temporal",
@@ -66,7 +66,7 @@ def probe(base_url: str, model_str: str) -> bool:
         r = litellm.completion(
             model=model_str,
             messages=[{"role": "user", "content": "Reply with one word: hello"}],
-            api_key="local",
+            api_key="EMPTY",
             base_url=base_url,
             max_tokens=16,
             temperature=0.0,
@@ -87,7 +87,7 @@ def probe(base_url: str, model_str: str) -> bool:
                 "parameters": {"type": "object", "properties": {}, "required": []},
             }}],
             tool_choice="auto",
-            api_key="local",
+            api_key="EMPTY",
             base_url=base_url,
             max_tokens=64,
             temperature=0.0,
@@ -108,7 +108,7 @@ def probe(base_url: str, model_str: str) -> bool:
 def main():
     args = parse_args()
 
-    base_url = os.environ.get("GEMMA4_BASE_URL", "http://localhost:8080/v1")
+    base_url = os.environ.get("GEMMA4_BASE_URL", "http://195.242.10.142:8000/v1")
     model_str = f"openai/{args.model_name}"
 
     print(f"Base URL: {base_url}")
@@ -138,7 +138,7 @@ def main():
         llm_user="gpt-4o",
         llm_args_agent={
             "temperature": 0.0,
-            "api_key": "local",
+            "api_key": "EMPTY",
             "base_url": base_url,
         },
         llm_args_user={"temperature": 0.7},
