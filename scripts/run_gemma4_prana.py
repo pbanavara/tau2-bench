@@ -57,6 +57,10 @@ def parse_args():
              "Overrides GEMMA4_BASE_URL env var. Default: http://localhost:8080/v1",
     )
     parser.add_argument(
+        "--verbose", action="store_true",
+        help="Enable DEBUG logging and LiteLLM verbose mode (shows every LLM request/response).",
+    )
+    parser.add_argument(
         "--overwrite", action="store_true",
         help="Delete existing results file and start fresh (skips the interactive prompt).",
     )
@@ -151,6 +155,9 @@ def main():
         output_path.unlink()
         print(f"Deleted existing results: {output_path}")
 
+    import litellm
+    litellm.set_verbose = args.verbose
+
     results = run_tasks(
         domain="prana",
         tasks=tasks,
@@ -167,24 +174,32 @@ def main():
         num_trials=args.num_trials,
         max_concurrency=1,
         save_to=str(output_path),
+        log_level="DEBUG" if args.verbose else "INFO",
     )
 
     print("\n=== Results ===")
-    print(f"{'Task':<8} {'Reward':<8} Breakdown")
-    print("-" * 50)
+    print(f"{'Task':<8} {'Reward':<8} {'Error':<30} Breakdown")
+    print("-" * 70)
     total = 0
+    n_scored = 0
     for sim in results.simulations:
+        err = getattr(sim, "error", None) or ""
+        if err:
+            print(f"Task {sim.task_id}: ERROR — {err[:120]}", flush=True)
+            continue
         r = sim.reward_info.reward
         total += r
         rb = {
             str(k).split(".")[-1]: v
             for k, v in (sim.reward_info.reward_breakdown or {}).items()
         }
-        print(f"{sim.task_id:<8} {r:<8.2f} {rb}")
+        print(f"{sim.task_id:<8} {r:<8.2f} {str(err):<30} {rb}", flush=True)
+        total += r
+        n_scored += 1
 
-    n = len(results.simulations)
-    print("-" * 50)
-    print(f"{'TOTAL':<8} {total/n:.2f}  ({n} tasks)")
+    print("-" * 70)
+    if n_scored:
+        print(f"{'TOTAL':<8} {total/n_scored:.2f}  ({n_scored} scored, {len(results.simulations)-n_scored} errors)")
     print(f"\nResults saved to: {output_path}")
 
 
