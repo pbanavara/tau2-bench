@@ -132,9 +132,35 @@ def main():
         base_url = os.environ.get("GEMMA4_BASE_URL", "http://195.242.10.142:8000/v1")
     model_str = f"openai/{args.model_name}"
 
+    chat_url = f"{base_url.rstrip('/')}/chat/completions"
     print(f"Base URL:         {base_url}")
-    print(f"Chat completions: {base_url.rstrip('/')}/chat/completions")
+    print(f"Chat completions: {chat_url}")
     print(f"Model:            {model_str}")
+
+    # Quick TCP + HTTP reachability check before handing off to LiteLLM
+    import socket, urllib.request, urllib.error
+    host, port = base_url.split("//")[1].split("/")[0].split(":") if ":" in base_url.split("//")[1].split("/")[0] else (base_url.split("//")[1].split("/")[0], "80")
+    print(f"\nChecking TCP connectivity to {host}:{port} ...", end=" ", flush=True)
+    try:
+        s = socket.create_connection((host, int(port)), timeout=5)
+        s.close()
+        print("OK")
+    except Exception as e:
+        print(f"FAILED ({e})")
+        print("Cannot reach server — check IP/port and that the server is running.")
+        sys.exit(1)
+
+    print(f"Checking GET {base_url.rstrip('/')}/models ...", end=" ", flush=True)
+    try:
+        req = urllib.request.Request(f"{base_url.rstrip('/')}/models", headers={"Authorization": "Bearer EMPTY"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            import json as _json
+            models = _json.loads(resp.read())
+            ids = [m["id"] for m in models.get("data", [])]
+            print(f"OK — models: {ids}")
+    except Exception as e:
+        print(f"FAILED ({e})")
+        print("Server reachable but /models returned an error — check the server logs.")
 
     if args.test:
         ok = probe(base_url, model_str)
