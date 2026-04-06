@@ -57,6 +57,10 @@ def parse_args():
              "Overrides GEMMA4_BASE_URL env var. Default: http://localhost:8080/v1",
     )
     parser.add_argument(
+        "--overwrite", action="store_true",
+        help="Delete existing results file and start fresh (skips the interactive prompt).",
+    )
+    parser.add_argument(
         "--test", action="store_true",
         help="Run connectivity probes (plain text, then tool call) before the benchmark.",
     )
@@ -124,8 +128,9 @@ def main():
         base_url = os.environ.get("GEMMA4_BASE_URL", "http://195.242.10.142:8000/v1")
     model_str = f"openai/{args.model_name}"
 
-    print(f"Base URL: {base_url}")
-    print(f"Model:    {model_str}")
+    print(f"Base URL:         {base_url}")
+    print(f"Chat completions: {base_url.rstrip('/')}/chat/completions")
+    print(f"Model:            {model_str}")
 
     if args.test:
         ok = probe(base_url, model_str)
@@ -137,10 +142,14 @@ def main():
     tasks = get_tasks(task_set_name="prana", task_split_name=args.split)
     print(f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}")
 
-    output_path = args.output or (
+    output_path = Path(args.output) if args.output else (
         Path(__file__).parent.parent / "data" / "simulations"
         / f"prana_gemma4_{args.split}.json"
     )
+
+    if args.overwrite and output_path.exists():
+        output_path.unlink()
+        print(f"Deleted existing results: {output_path}")
 
     results = run_tasks(
         domain="prana",
