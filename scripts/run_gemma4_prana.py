@@ -52,6 +52,11 @@ def parse_args():
              "Check what name mlx_vlm.server advertises via GET /v1/models.",
     )
     parser.add_argument(
+        "--server", default=None,
+        help="Server base URL or IP:port (e.g. '195.242.10.142:8000' or 'http://host:port/v1'). "
+             "Overrides GEMMA4_BASE_URL env var. Default: http://localhost:8080/v1",
+    )
+    parser.add_argument(
         "--test", action="store_true",
         help="Run connectivity probes (plain text, then tool call) before the benchmark.",
     )
@@ -108,7 +113,15 @@ def probe(base_url: str, model_str: str) -> bool:
 def main():
     args = parse_args()
 
-    base_url = os.environ.get("GEMMA4_BASE_URL", "http://195.242.10.142:8000/v1")
+    if args.server:
+        server = args.server
+        if not server.startswith("http"):
+            server = f"http://{server}"
+        if not server.endswith("/v1"):
+            server = f"{server}/v1"
+        base_url = server
+    else:
+        base_url = os.environ.get("GEMMA4_BASE_URL", "http://195.242.10.142:8000/v1")
     model_str = f"openai/{args.model_name}"
 
     print(f"Base URL: {base_url}")
