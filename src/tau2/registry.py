@@ -35,10 +35,14 @@ from tau2.domains.intake.environment import (
     get_tasks_split as intake_get_tasks_split,
 )
 from tau2.domains.mock.environment import get_environment as mock_domain_get_environment
-from tau2.domains.prana.environment import get_environment as prana_domain_get_environment
-from tau2.domains.prana.environment import get_tasks as prana_domain_get_tasks
-from tau2.domains.prana.environment import get_tasks_split as prana_domain_get_tasks_split
 from tau2.domains.mock.environment import get_tasks as mock_domain_get_tasks
+from tau2.domains.prana.environment import (
+    get_environment as prana_domain_get_environment,
+)
+from tau2.domains.prana.environment import get_tasks as prana_domain_get_tasks
+from tau2.domains.prana.environment import (
+    get_tasks_split as prana_domain_get_tasks_split,
+)
 from tau2.domains.retail.environment import (
     get_environment as retail_domain_get_environment,
 )

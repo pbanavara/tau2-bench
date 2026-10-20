@@ -34,7 +34,10 @@ def _format_history(field: str, history: list[LabResult], patient_id: str) -> st
         val = entry.value if entry.value is not None else "NOT_RECORDED"
         lines.append(f"  {val} (recorded: {entry.recorded_at})")
 
-    return f"{field} measurement history for {patient_id} (filing date: {FILING_DATE}):\n" + "\n".join(lines)
+    return (
+        f"{field} measurement history for {patient_id} (filing date: {FILING_DATE}):\n"
+        + "\n".join(lines)
+    )
 
 
 class PranaTools(ToolKitBase):
