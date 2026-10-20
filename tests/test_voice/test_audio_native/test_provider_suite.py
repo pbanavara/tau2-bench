@@ -55,7 +55,8 @@ from typing import List, Optional
 
 import pytest
 
-from tau2.config import TELEPHONY_ULAW_SILENCE
+from tau2.config import DEFAULT_OPENAI_LIVE_MODEL, TELEPHONY_ULAW_SILENCE
+from tau2.data_model.live_config import LiveConfig
 from tau2.environment.tool import Tool
 from tau2.voice.audio_native.adapter import DiscreteTimeAdapter, create_adapter
 from tau2.voice.audio_native.tick_result import TickResult
@@ -73,6 +74,19 @@ TESTDATA_DIR = Path(__file__).parent / "testdata"
 # have credentials for.
 PROVIDERS = [
     pytest.param(
+        "openai_live",
+        marks=pytest.mark.skipif(
+            not all(
+                os.environ.get(key)
+                for key in (
+                    "OPENAI_API_KEY",
+                    "OPENAI_LIVE_BACKEND_MODEL",
+                )
+            ),
+            reason="OpenAI Live credentials and backend model are required",
+        ),
+    ),
+    pytest.param(
         "gemini",
         marks=pytest.mark.skipif(
             not (
@@ -85,6 +99,13 @@ PROVIDERS = [
     ),
     pytest.param(
         "livekit",
+        marks=pytest.mark.skipif(
+            not os.environ.get("LIVEKIT_TEST_ENABLED"),
+            reason="LIVEKIT_TEST_ENABLED not set",
+        ),
+    ),
+    pytest.param(
+        "livekit-thinking",
         marks=pytest.mark.skipif(
             not os.environ.get("LIVEKIT_TEST_ENABLED"),
             reason="LIVEKIT_TEST_ENABLED not set",
@@ -181,6 +202,13 @@ def make_silence(tick_duration_ms: int = TICK_DURATION_MS) -> bytes:
     return TELEPHONY_ULAW_SILENCE * num_bytes
 
 
+def has_agent_speech(result: TickResult) -> bool:
+    """Use normalized activity when a continuous-media adapter provides it."""
+    if result.contains_speech is not None:
+        return result.contains_speech
+    return result.agent_audio_bytes > 0
+
+
 def _make_order_tool() -> Tool:
     """Create the get_order_status tool used in tool-call tests."""
 
@@ -225,9 +253,56 @@ def assert_played_audio_length(
     )
 
 
+# Upper bound for tick wall-clock duration (same as test_tick_duration_bounds)
+TICK_DURATION_MAX_FACTOR = 1.5
+
+
+class TickTimer:
+    """Collects tick wall-clock durations and asserts the timing invariant."""
+
+    def __init__(self):
+        self.timings: List[float] = []
+
+    def run_tick(
+        self,
+        adapter: DiscreteTimeAdapter,
+        user_audio: bytes,
+        tick_number: int,
+    ) -> TickResult:
+        start = time.time()
+        result = adapter.run_tick(user_audio, tick_number=tick_number)
+        elapsed_ms = (time.time() - start) * 1000
+        self.timings.append(elapsed_ms)
+        max_ms = TICK_DURATION_MS * TICK_DURATION_MAX_FACTOR
+        assert elapsed_ms <= max_ms, (
+            f"Tick {tick_number} took {elapsed_ms:.0f}ms, "
+            f"expected <= {max_ms:.0f}ms (tick_duration={TICK_DURATION_MS}ms × "
+            f"{TICK_DURATION_MAX_FACTOR})"
+        )
+        return result
+
+    def print_diagnostics(self, label: str = "") -> None:
+        if not self.timings:
+            return
+        sorted_t = sorted(self.timings)
+        p95_idx = int(len(sorted_t) * 0.95)
+        p95 = sorted_t[min(p95_idx, len(sorted_t) - 1)]
+        over = sum(
+            1 for t in self.timings if t > TICK_DURATION_MS * TICK_DURATION_MAX_FACTOR
+        )
+        print(
+            f"\n  [{label}] {len(self.timings)} ticks: "
+            f"min={min(self.timings):.0f}ms, "
+            f"avg={sum(self.timings) / len(self.timings):.0f}ms, "
+            f"p95={p95:.0f}ms, max={max(self.timings):.0f}ms, "
+            f"over-budget={over}"
+        )
+
+
 def run_ticks_until(
     adapter: DiscreteTimeAdapter,
     audio_chunks: List[bytes],
+    timer: TickTimer,
     *,
     max_ticks: int = MAX_RESPONSE_TICKS,
     stop_when: Optional[str] = None,
@@ -237,6 +312,7 @@ def run_ticks_until(
     Args:
         adapter: The adapter to run ticks on.
         audio_chunks: Audio chunks to send (one per tick).
+        timer: TickTimer that records durations and asserts timing invariant.
         max_ticks: Maximum total ticks to run.
         stop_when: Stop condition -- "agent_audio" stops when agent produces audio,
             "tool_call" stops when a tool call is detected.
@@ -249,13 +325,13 @@ def run_ticks_until(
 
     for tick in range(max_ticks):
         user_audio = audio_chunks[tick] if tick < len(audio_chunks) else silence
-        result = adapter.run_tick(user_audio, tick_number=tick + 1)
+        result = timer.run_tick(adapter, user_audio, tick + 1)
         results.append(result)
 
         assert_audio_capping(result, adapter)
         assert_played_audio_length(result, adapter)
 
-        if stop_when == "agent_audio" and result.agent_audio_bytes > 0:
+        if stop_when == "agent_audio" and has_agent_speech(result):
             return results
         if stop_when == "tool_call" and result.tool_calls:
             return results
@@ -274,10 +350,36 @@ def provider_name(request) -> str:
     return request.param
 
 
+CASCADED_CONFIG_ALIASES = {
+    "livekit-thinking": ("livekit", "openai-thinking"),
+}
+
+
 @pytest.fixture
 def adapter(provider_name: str):
     """Create, yield, and teardown a DiscreteTimeAdapter."""
-    adapter, _model = create_adapter(provider_name, tick_duration_ms=TICK_DURATION_MS)
+    real_provider = provider_name
+    cascaded_config = None
+    live_config = None
+    model = None
+
+    if provider_name == "openai_live":
+        model = os.environ.get("OPENAI_LIVE_MODEL", DEFAULT_OPENAI_LIVE_MODEL)
+        live_config = LiveConfig(backend_model=os.environ["OPENAI_LIVE_BACKEND_MODEL"])
+
+    if provider_name in CASCADED_CONFIG_ALIASES:
+        from tau2.data_model.cascaded import CASCADED_CONFIGS
+
+        real_provider, config_name = CASCADED_CONFIG_ALIASES[provider_name]
+        cascaded_config = CASCADED_CONFIGS[config_name]
+
+    adapter, _model = create_adapter(
+        real_provider,
+        tick_duration_ms=TICK_DURATION_MS,
+        cascaded_config=cascaded_config,
+        model=model,
+        live_config=live_config,
+    )
     yield adapter
     if adapter.is_connected:
         adapter.disconnect()
@@ -293,6 +395,14 @@ def connected_adapter(adapter: DiscreteTimeAdapter):
         modality="audio",
     )
     yield adapter
+
+
+@pytest.fixture
+def timer(request, provider_name: str):
+    """Tick timer that records durations and prints diagnostics at teardown."""
+    t = TickTimer()
+    yield t
+    t.print_diagnostics(f"{provider_name}/{request.node.name}")
 
 
 # =============================================================================
@@ -386,15 +496,17 @@ class TestSingleTurn:
 
     @pytest.mark.parametrize("audio_file", SPEECH_AUDIO)
     def test_single_turn_reply(
-        self, connected_adapter: DiscreteTimeAdapter, audio_file: str
+        self, connected_adapter: DiscreteTimeAdapter, audio_file: str, timer: TickTimer
     ):
         """Send speech audio, verify agent responds with audio and transcript."""
         audio = load_telephony_audio(audio_file)
         chunks = chunk_audio(audio, connected_adapter.bytes_per_tick)
 
-        results = run_ticks_until(connected_adapter, chunks, stop_when="agent_audio")
+        results = run_ticks_until(
+            connected_adapter, chunks, timer, stop_when="agent_audio"
+        )
 
-        got_audio = any(r.agent_audio_bytes > 0 for r in results)
+        got_audio = any(has_agent_speech(r) for r in results)
         assert got_audio, (
             f"Agent did not produce audio within {len(results)} ticks "
             f"({len(results) * TICK_DURATION_MS}ms) for {audio_file}"
@@ -403,9 +515,7 @@ class TestSingleTurn:
         # Drain a few more ticks to let transcript arrive (may lag behind audio)
         silence = make_silence()
         for tick in range(10):
-            result = connected_adapter.run_tick(
-                silence, tick_number=len(results) + tick + 1
-            )
+            result = timer.run_tick(connected_adapter, silence, len(results) + tick + 1)
             results.append(result)
             assert_audio_capping(result, connected_adapter)
 
@@ -424,23 +534,25 @@ class TestSingleTurn:
 class TestMultiTurn:
     """Verify the adapter handles multiple conversation turns."""
 
-    def test_multi_turn_reply(self, connected_adapter: DiscreteTimeAdapter):
+    def test_multi_turn_reply(
+        self, connected_adapter: DiscreteTimeAdapter, timer: TickTimer
+    ):
         """Two consecutive exchanges, both produce audio responses."""
         t1_audio = load_telephony_audio("hi_how_are_you.ulaw")
         t1_chunks = chunk_audio(t1_audio, connected_adapter.bytes_per_tick)
 
         # Turn 1: send speech, wait for response
         results_t1 = run_ticks_until(
-            connected_adapter, t1_chunks, stop_when="agent_audio"
+            connected_adapter, t1_chunks, timer, stop_when="agent_audio"
         )
-        got_audio_t1 = any(r.agent_audio_bytes > 0 for r in results_t1)
+        got_audio_t1 = any(has_agent_speech(r) for r in results_t1)
         assert got_audio_t1, "Turn 1: agent did not produce audio"
 
         # Let the agent finish responding (drain remaining audio)
         silence = make_silence()
         for tick in range(20):
-            result = connected_adapter.run_tick(
-                silence, tick_number=len(results_t1) + tick + 1
+            result = timer.run_tick(
+                connected_adapter, silence, len(results_t1) + tick + 1
             )
             assert_audio_capping(result, connected_adapter)
             assert_played_audio_length(result, connected_adapter)
@@ -453,16 +565,16 @@ class TestMultiTurn:
         results_t2: List[TickResult] = []
         for tick in range(MAX_RESPONSE_TICKS):
             user_audio = t2_chunks[tick] if tick < len(t2_chunks) else silence
-            result = connected_adapter.run_tick(
-                user_audio, tick_number=tick_offset + tick + 1
+            result = timer.run_tick(
+                connected_adapter, user_audio, tick_offset + tick + 1
             )
             results_t2.append(result)
             assert_audio_capping(result, connected_adapter)
             assert_played_audio_length(result, connected_adapter)
-            if result.agent_audio_bytes > 0:
+            if has_agent_speech(result):
                 break
 
-        got_audio_t2 = any(r.agent_audio_bytes > 0 for r in results_t2)
+        got_audio_t2 = any(has_agent_speech(r) for r in results_t2)
         assert got_audio_t2, "Turn 2: agent did not produce audio"
 
 
@@ -474,7 +586,7 @@ class TestMultiTurn:
 class TestToolCall:
     """Verify tool calls work end-to-end."""
 
-    def test_tool_call_round_trip(self, adapter: DiscreteTimeAdapter):
+    def test_tool_call_round_trip(self, adapter: DiscreteTimeAdapter, timer: TickTimer):
         """Send order status audio with tool configured, verify round-trip."""
         tool = _make_order_tool()
 
@@ -489,7 +601,7 @@ class TestToolCall:
         chunks = chunk_audio(audio, adapter.bytes_per_tick)
 
         # Phase 1: send audio and wait for tool call
-        results = run_ticks_until(adapter, chunks, stop_when="tool_call")
+        results = run_ticks_until(adapter, chunks, timer, stop_when="tool_call")
 
         tool_call_results = [r for r in results if r.tool_calls]
         assert tool_call_results, (
@@ -513,10 +625,10 @@ class TestToolCall:
         got_response_audio = False
 
         for tick in range(MAX_RESPONSE_TICKS):
-            result = adapter.run_tick(silence, tick_number=tick_offset + tick + 1)
+            result = timer.run_tick(adapter, silence, tick_offset + tick + 1)
             assert_audio_capping(result, adapter)
             assert_played_audio_length(result, adapter)
-            if result.agent_audio_bytes > 0:
+            if has_agent_speech(result):
                 got_response_audio = True
                 break
 
@@ -524,33 +636,140 @@ class TestToolCall:
 
 
 # =============================================================================
+# Tests: Usage / cost reporting
+# =============================================================================
+
+# Ticks to drain after the agent starts speaking so the provider's usage
+# event (typically emitted at end-of-response) has time to arrive.
+USAGE_DRAIN_TICKS = 50  # 10 seconds at 200ms ticks
+
+
+class TestUsageReporting:
+    """Verify the adapter reports usage records that price to a dollar cost.
+
+    The eval framework builds SimulationRun.agent_usage / agent_cost from
+    adapter.get_usage_records(), so every provider must (a) emit at least one
+    UsageRecord with a positive billable quantity and (b) resolve to a
+    non-None cost via the pricing table.
+    """
+
+    def test_usage_reported_after_turn(
+        self, connected_adapter: DiscreteTimeAdapter, timer: TickTimer
+    ):
+        """One spoken turn must yield usage records that price to a cost > 0."""
+        from tau2.voice.pricing import build_session_usage
+
+        audio = load_telephony_audio("hi_how_are_you.ulaw")
+        chunks = chunk_audio(audio, connected_adapter.bytes_per_tick)
+
+        results = run_ticks_until(
+            connected_adapter, chunks, timer, stop_when="agent_audio"
+        )
+        assert any(has_agent_speech(r) for r in results), (
+            "Agent never produced audio; cannot check usage reporting"
+        )
+
+        # Drain until usage records show up (or the drain budget is spent).
+        silence = make_silence()
+        for tick in range(USAGE_DRAIN_TICKS):
+            if connected_adapter.get_usage_records():
+                break
+            result = timer.run_tick(connected_adapter, silence, len(results) + tick + 1)
+            results.append(result)
+            assert_audio_capping(result, connected_adapter)
+
+        records = connected_adapter.get_usage_records()
+        assert records, (
+            f"No usage records reported within {len(results)} ticks "
+            f"({len(results) * TICK_DURATION_MS}ms) after a full spoken turn"
+        )
+
+        # Every record must identify where it came from.
+        for record in records:
+            assert record.provider, f"UsageRecord missing provider: {record}"
+            assert record.model, f"UsageRecord missing model: {record}"
+
+        # At least one billable record must carry a positive quantity.
+        def _billable_quantity(r) -> float:
+            return (
+                (r.input_tokens or 0)
+                + (r.output_tokens or 0)
+                + (r.audio_input_seconds or 0)
+                + (r.characters or 0)
+            )
+
+        billable = [r for r in records if r.billable]
+        assert billable, f"All {len(records)} usage records are non-billable"
+        assert any(_billable_quantity(r) > 0 for r in billable), (
+            "No billable usage record has a positive quantity: "
+            f"{[r.model_dump(exclude_none=True) for r in billable]}"
+        )
+
+        # The pricing table must resolve the session to a real dollar cost.
+        usage = build_session_usage(records)
+        assert usage.cost is not None, (
+            "Session cost is None -- provider/model not covered by the pricing "
+            f"table. Breakdown: {usage.cost_breakdown}, "
+            f"records: {[(r.provider, r.model, r.component) for r in records]}"
+        )
+        assert usage.cost > 0, f"Session cost is {usage.cost}, expected > 0"
+
+        num_tick_records = sum(len(r.usage_records) for r in results)
+        print(
+            f"\n  Usage: {len(records)} ledger records "
+            f"({num_tick_records} attached to ticks), "
+            f"cost=${usage.cost:.6f}, breakdown={usage.cost_breakdown}"
+        )
+
+
+# =============================================================================
 # Tests: Barge-in / interruption
 # =============================================================================
 
 
+BARGE_IN_SYSTEM_PROMPT = (
+    "You are a helpful assistant. When asked anything, give a very long, "
+    "detailed response. Explain thoroughly with multiple paragraphs. "
+    "Never give short answers."
+)
+
+# Minimum agent audio ticks to confirm sustained speech before interrupting
+MIN_AGENT_AUDIO_TICKS = 25  # 5 seconds at 200ms ticks
+# How many ticks of agent audio to let play before sending interrupt
+INTERRUPT_AFTER_TICKS = 5  # 1 second at 200ms ticks
+# Consecutive silence ticks required to confirm agent yielded
+SILENCE_TICKS_REQUIRED = 3  # 0.6 seconds
+# Max trailing audio ticks allowed after interruption event
+MAX_TRAILING_AUDIO_TICKS = 3  # ~0.6 seconds grace for pipeline flush
+
+
 class TestBargeIn:
-    """Verify the adapter handles user interruptions during agent speech."""
+    """Verify the adapter handles user interruptions and actually yields."""
 
     @pytest.mark.parametrize("audio_file", SPEECH_AUDIO)
-    def test_barge_in(self, connected_adapter: DiscreteTimeAdapter, audio_file: str):
-        """Interrupt the agent while it is speaking and verify truncation."""
-        trigger_audio = load_telephony_audio(audio_file)
-        trigger_chunks = chunk_audio(trigger_audio, connected_adapter.bytes_per_tick)
-
-        # Step 1: trigger agent response
-        results = run_ticks_until(
-            connected_adapter, trigger_chunks, stop_when="agent_audio"
+    def test_barge_in_detected(
+        self, adapter: DiscreteTimeAdapter, audio_file: str, timer: TickTimer
+    ):
+        """Basic check: interruption event fires when user speaks over agent."""
+        adapter.connect(
+            system_prompt=BARGE_IN_SYSTEM_PROMPT,
+            tools=[],
+            vad_config=None,
+            modality="audio",
         )
-        assert any(r.agent_audio_bytes > 0 for r in results), (
+
+        trigger_audio = load_telephony_audio(audio_file)
+        trigger_chunks = chunk_audio(trigger_audio, adapter.bytes_per_tick)
+
+        results = run_ticks_until(
+            adapter, trigger_chunks, timer, stop_when="agent_audio"
+        )
+        assert any(has_agent_speech(r) for r in results), (
             f"Agent never started speaking for {audio_file}"
         )
 
-        # Step 2: while agent is producing audio, send speech to trigger barge-in.
-        # Use "help_me.ulaw" as the interrupting speech.
         interrupt_audio = load_telephony_audio("help_me.ulaw")
-        interrupt_chunks = chunk_audio(
-            interrupt_audio, connected_adapter.bytes_per_tick
-        )
+        interrupt_chunks = chunk_audio(interrupt_audio, adapter.bytes_per_tick)
 
         tick_offset = len(results)
         truncation_detected = False
@@ -561,10 +780,8 @@ class TestBargeIn:
                 if tick < len(interrupt_chunks)
                 else make_silence()
             )
-            result = connected_adapter.run_tick(
-                user_audio, tick_number=tick_offset + tick + 1
-            )
-            assert_audio_capping(result, connected_adapter)
+            result = timer.run_tick(adapter, user_audio, tick_offset + tick + 1)
+            assert_audio_capping(result, adapter)
 
             if result.was_truncated:
                 truncation_detected = True
@@ -576,4 +793,147 @@ class TestBargeIn:
         assert truncation_detected, (
             "Barge-in not detected: no was_truncated or speech_started/interrupted "
             f"event within {MAX_RESPONSE_TICKS} ticks after sending interrupting speech"
+        )
+
+    def test_barge_in_baseline(self, adapter: DiscreteTimeAdapter, timer: TickTimer):
+        """Verify agent produces sustained audio (5s+) with the barge-in prompt.
+
+        This establishes that the prompt reliably triggers a long response,
+        so test_barge_in_agent_yields can trust the agent would have kept
+        speaking if not interrupted.
+        """
+        adapter.connect(
+            system_prompt=BARGE_IN_SYSTEM_PROMPT,
+            tools=[],
+            vad_config=None,
+            modality="audio",
+        )
+
+        trigger_audio = load_telephony_audio("hi_how_are_you.ulaw")
+        trigger_chunks = chunk_audio(trigger_audio, adapter.bytes_per_tick)
+
+        results = run_ticks_until(
+            adapter, trigger_chunks, timer, stop_when="agent_audio"
+        )
+        assert any(has_agent_speech(r) for r in results), "Agent never started speaking"
+
+        tick_num = len(results)
+        silence = make_silence()
+        agent_audio_ticks = 0
+
+        for _ in range(MAX_RESPONSE_TICKS):
+            tick_num += 1
+            result = timer.run_tick(adapter, silence, tick_num)
+            assert_audio_capping(result, adapter)
+            if has_agent_speech(result):
+                agent_audio_ticks += 1
+            if agent_audio_ticks >= MIN_AGENT_AUDIO_TICKS:
+                break
+
+        assert agent_audio_ticks >= MIN_AGENT_AUDIO_TICKS, (
+            f"Agent only produced {agent_audio_ticks} ticks of audio "
+            f"({agent_audio_ticks * TICK_DURATION_MS}ms), "
+            f"need at least {MIN_AGENT_AUDIO_TICKS} ticks "
+            f"({MIN_AGENT_AUDIO_TICKS * TICK_DURATION_MS}ms)"
+        )
+
+    def test_barge_in_agent_yields(
+        self, adapter: DiscreteTimeAdapter, timer: TickTimer
+    ):
+        """Full interruption lifecycle: agent speaks, user interrupts, agent yields.
+
+        Relies on test_barge_in_baseline confirming the prompt produces 5s+
+        of agent audio. This test interrupts after 1 second and verifies
+        the agent actually stops.
+        """
+        adapter.connect(
+            system_prompt=BARGE_IN_SYSTEM_PROMPT,
+            tools=[],
+            vad_config=None,
+            modality="audio",
+        )
+
+        # Phase 1: trigger long agent response
+        trigger_audio = load_telephony_audio("hi_how_are_you.ulaw")
+        trigger_chunks = chunk_audio(trigger_audio, adapter.bytes_per_tick)
+
+        results = run_ticks_until(
+            adapter, trigger_chunks, timer, stop_when="agent_audio"
+        )
+        assert any(has_agent_speech(r) for r in results), "Agent never started speaking"
+
+        # Phase 2: let agent speak for INTERRUPT_AFTER_TICKS (~1 second)
+        tick_num = len(results)
+        silence = make_silence()
+        agent_audio_ticks = 0
+
+        for _ in range(INTERRUPT_AFTER_TICKS + 5):
+            tick_num += 1
+            result = timer.run_tick(adapter, silence, tick_num)
+            assert_audio_capping(result, adapter)
+            if has_agent_speech(result):
+                agent_audio_ticks += 1
+            if agent_audio_ticks >= INTERRUPT_AFTER_TICKS:
+                break
+
+        assert agent_audio_ticks >= INTERRUPT_AFTER_TICKS, (
+            f"Agent only produced {agent_audio_ticks} ticks of audio, "
+            f"need at least {INTERRUPT_AFTER_TICKS} before interrupting"
+        )
+
+        # Phase 3: send interrupt speech (~3 seconds)
+        interrupt_audio = load_telephony_audio("check_order_12345.ulaw")
+        interrupt_chunks = chunk_audio(interrupt_audio, adapter.bytes_per_tick)
+
+        interruption_tick = None
+        trailing_audio_ticks = 0
+        consecutive_silence = 0
+
+        for tick in range(MAX_RESPONSE_TICKS):
+            user_audio = (
+                interrupt_chunks[tick] if tick < len(interrupt_chunks) else silence
+            )
+            tick_num += 1
+            result = timer.run_tick(adapter, user_audio, tick_num)
+            assert_audio_capping(result, adapter)
+
+            # Check for interruption event
+            if interruption_tick is None:
+                if result.was_truncated or any(
+                    v in ("speech_started", "interrupted") for v in result.vad_events
+                ):
+                    interruption_tick = tick
+
+            # After interruption, track silence
+            if interruption_tick is not None:
+                if has_agent_speech(result):
+                    trailing_audio_ticks += 1
+                    consecutive_silence = 0
+                else:
+                    consecutive_silence += 1
+
+                if consecutive_silence >= SILENCE_TICKS_REQUIRED:
+                    break
+
+        # Assert interruption was detected
+        assert interruption_tick is not None, (
+            "Barge-in not detected: no interruption event within "
+            f"{MAX_RESPONSE_TICKS} ticks"
+        )
+
+        # Assert agent actually stopped (silence follows)
+        assert consecutive_silence >= SILENCE_TICKS_REQUIRED, (
+            f"Agent did not yield after interruption: only {consecutive_silence} "
+            f"consecutive silence ticks (need {SILENCE_TICKS_REQUIRED}). "
+            f"Trailing audio ticks after event: {trailing_audio_ticks}"
+        )
+
+        # Report timing for diagnostic insight
+        trailing_ms = trailing_audio_ticks * TICK_DURATION_MS
+        interrupt_delay_ms = interruption_tick * TICK_DURATION_MS
+        print(
+            f"\n  Interruption detected at tick +{interruption_tick} "
+            f"({interrupt_delay_ms}ms after interrupt speech started)"
+            f"\n  Trailing agent audio after event: {trailing_audio_ticks} ticks "
+            f"({trailing_ms}ms)"
         )

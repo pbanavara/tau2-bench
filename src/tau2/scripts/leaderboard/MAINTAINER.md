@@ -8,13 +8,17 @@
 
 ## Handling a Submission PR
 
+A PR adds either a 1.x / voice-v1 `submission.json` (this section) or a 2.0
+package (`benchmark-submission.json`; see
+[Handling a 2.0 package PR](#handling-a-20-package-pr)).
+
 When someone opens a PR with a new `submission.json`:
 
 ### 1. Review the PR
 
 Check the submission.json manually:
 - Directory name follows `{model_name}_{org}_{date}` convention
-- `manifest.json` is updated (correct array: `submissions`, `voice_submissions`, or `legacy_submissions`)
+- `manifest.json` is updated (correct array: `submissions`, `voice_submissions`, or `legacy_submissions`; 2.0 packages use `voice_v2_submissions`)
 - `submission_type` is `"standard"` or `"custom"` (if custom: check `methodology.notes` and `references`)
 - Contact info is present
 - For voice: `modality` is `"voice"`, `voice_config` is present
@@ -52,9 +56,10 @@ The script will:
 1. Parse the PR's `submission.json`
 2. Load and validate trajectory files (format, task coverage, trial counts)
 3. Recompute metrics and compare against submitted scores
-4. Update `submission.json` with `trajectories_available: true` and `trajectory_files`
-5. (With `--upload`) Upload trajectories and updated `submission.json` to S3
-6. (With `--upload`) Verify the upload (HTTP 200, file sizes match)
+4. (Voice) Recompute `interaction_metrics` from the tick data, replacing any submitter-provided values
+5. Update `submission.json` with `trajectories_available: true` and `trajectory_files`
+6. (With `--upload`) Upload trajectories and updated `submission.json` to S3
+7. (With `--upload`) Verify the upload (HTTP 200, file sizes match)
 
 ### 4. Verify upload separately (optional)
 
@@ -72,6 +77,61 @@ python -m tau2.scripts.leaderboard.review_submission \
 After the script updates `submission.json`, commit the change and merge the PR.
 The GitHub Actions workflow will sync `submission.json` and `manifest.json` to S3
 (trajectories are excluded from the sync — they were uploaded directly by the script).
+
+## Handling a 2.0 package PR
+
+A 2.0 package is three files in `web/leaderboard/public/submissions/<name>/`:
+`benchmark-submission.json`, `benchmark-diagnostics.json` (voice-v2) and
+`benchmark-metadata.json`. voice-v2 packages are listed in the manifest's
+`voice_v2_submissions` array and shown as rows of the τ³-Voice **τ-i18n
+(Multilingual)** leaderboard, ranked with the paper cohort on task completion.
+voice-v2-banking and voice-v2-entity packages (`benchmark-submission.json` and
+`benchmark-metadata.json` only) go in `voice_v2_domain_submissions`. Each fills
+the Banking or Intake row of the voice-v2 package with the same model name,
+organization, agent provider, agent model and submission type, and never
+changes its Overall. Without a matching voice-v2 package it is shown only
+under its own domain. 1.x tabs are unaffected.
+
+1. **Review** the PR: the directory name equals
+   `{model_name}_{model_organization}_{submission_date}` (slugified; the review
+   script checks it), `benchmark-metadata.json` has a contact email, and
+   `submission_type` is right.
+2. **Download** the submitter's matrix root (`benchmark-frame.json` plus every
+   `<language>-<domain>/` cell with `results.json`, `simulations/`,
+   `artifacts/` and `diagnostics/`).
+3. **Validate, then upload:**
+
+   ```bash
+   python -m tau2.scripts.leaderboard.review_submission \
+     web/leaderboard/public/submissions/<name> /tmp/review-matrix/          # dry run
+   python -m tau2.scripts.leaderboard.review_submission \
+     web/leaderboard/public/submissions/<name> /tmp/review-matrix/ \
+     --upload --aws-profile tau-bench-ci
+   ```
+
+   The script recomputes rewards, judge diagnostics and the recorded agent
+   identity from the matrix (`tau2 submit validate`), then prints the upload
+   plan. With `--upload` it syncs each cell to
+   `s3://sierra-tau-bench-public/submissions/<name>/trajectories/<language>/<domain>/`
+   and the root's JSON files to `trajectories/`, sets `trajectories` in
+   `benchmark-metadata.json` to `s3://sierra-tau-bench-public/submissions/<name>`,
+   uploads the package files and checks that every cell's `results.json` is
+   publicly readable. `--verify-only` repeats that check.
+4. **Commit** the updated `benchmark-metadata.json` and merge. The sync workflow
+   copies the package files; it never deletes uploaded evidence.
+
+To re-validate a package from S3, download `trajectories/<language>/<domain>/`
+back into `<language>-<domain>/` cells next to `trajectories/benchmark-frame.json`.
+
+### The frozen 2026-10-02 release
+
+Release packages cite the release export instead of a matrix
+(`"evidence": "historical-voice-v2-2026-10-02"`). Build and review them with
+`--historical-voice-v2` and one `--judges-root` per judge suite; see
+[docs/voice-v2-publication.md](../../../../docs/voice-v2-publication.md). The
+upload also copies the export's `correction.json` to `source_correction.json`
+and the verdicts to `judges/<agent_provider>/<language>/`, matching the
+uploaded Gemini entry.
 
 ## Manual S3 Commands
 
@@ -101,6 +161,25 @@ aws s3api head-object \
 aws s3 rm s3://sierra-tau-bench-public/submissions/<dir>/trajectories/<file> --profile tau-bench-ci
 aws s3 cp /local/path s3://sierra-tau-bench-public/submissions/<dir>/trajectories/<file> --profile tau-bench-ci
 ```
+
+## Backfilling Interaction Metrics
+
+If the interaction-metric code changes in a way that warrants recomputation
+(major refactor — see `INTERACTION_METRICS_VERSION`), or a voice submission is
+missing its `interaction_metrics` block, recompute from the public S3
+trajectories:
+
+```bash
+# All voice submissions in the manifest (downloads trajectories to ~/.cache/tau2/)
+python -m tau2.scripts.leaderboard.backfill_interaction_metrics
+
+# Specific submissions, or a dry run
+python -m tau2.scripts.leaderboard.backfill_interaction_metrics \
+  --submissions gpt-realtime-2_openai_2026-06-24 --dry-run
+```
+
+The script patches the local `web/leaderboard/public/submissions/<dir>/submission.json`
+files; commit them via PR and the GitHub Actions sync pushes them to S3.
 
 ## Troubleshooting
 

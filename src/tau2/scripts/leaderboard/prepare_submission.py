@@ -10,12 +10,18 @@ from rich.prompt import Confirm, Prompt
 from tau2.config import VOICE_USER_SIMULATOR_VERSION
 from tau2.data_model.simulation import Results as TrajectoryResults
 from tau2.metrics.agent_metrics import AgentMetrics, compute_metrics
+from tau2.scripts.leaderboard.compute_interaction_metrics import (
+    build_interaction_metrics_block,
+    compute_metrics_for_loaded_results,
+)
 from tau2.scripts.leaderboard.submission import (
     SUBMISSION_FILE_NAME,
     TRAJECTORY_FILES_DIR_NAME,
     ContactInfo,
     DomainResults,
+    InteractionMetrics,
     Methodology,
+    ModelRelease,
     Reference,
     Results,
     Submission,
@@ -132,6 +138,65 @@ def validate_submission_traj_set(
         tuple[bool, str]: True if the submission set is valid, False otherwise
     """
     domain_names = set()
+    voice_v1 = any(
+        result.info.benchmark is not None
+        and result.info.benchmark.benchmark_version == "voice-v1"
+        for result in all_results
+    )
+    if voice_v1:
+        from tau2.runner.presets import load_frame
+
+        first = next(
+            result.info.benchmark
+            for result in all_results
+            if result.info.benchmark is not None
+            and result.info.benchmark.benchmark_version == "voice-v1"
+        )
+        if not first.trials:
+            return False, "Voice V1 trajectory has no recorded trials"
+        frame = load_frame("voice-v1", num_trials=len(first.trials))
+        cells = {(cell.language, cell.domain): cell for cell in frame.cells}
+        for results in all_results:
+            recorded = results.info.benchmark
+            if recorded is None or recorded.benchmark_version != "voice-v1":
+                return False, "Voice V1 submissions cannot mix benchmark modes"
+            cell = cells.get((recorded.language, recorded.domain))
+            if (
+                cell is None
+                or recorded.frame_revision != frame.revision
+                or recorded.binding_revision != cell.binding_revision
+                or recorded.canonical_task_ids != cell.canonical_task_ids
+                or recorded.selected_task_ids != cell.canonical_task_ids
+                or recorded.trials != frame.trials
+                or results.info.environment_info.domain_name != recorded.domain
+                or results.info.language != "en"
+            ):
+                return (
+                    False,
+                    "Voice V1 trajectory differs from the released English frame",
+                )
+            task_ids = [task.id for task in results.tasks]
+            if (
+                len(task_ids) != len(set(task_ids))
+                or len(task_ids) != len(cell.canonical_task_ids)
+                or set(task_ids) != set(results.info.language_tasks)
+            ):
+                return False, "Voice V1 trajectory has an incomplete task population"
+            if {
+                context.canonical_task_id
+                for context in results.info.language_tasks.values()
+                if context.canonical_task_id in cell.canonical_task_ids
+            } != set(cell.canonical_task_ids):
+                return False, "Voice V1 trajectory lacks canonical task provenance"
+            observed = {(run.task_id, run.trial) for run in results.simulations}
+            expected = {
+                (task_id, trial) for task_id in task_ids for trial in frame.trials
+            }
+            if observed != expected or len(observed) != len(results.simulations):
+                return (
+                    False,
+                    "Voice V1 trajectory must contain exactly one result per task/trial",
+                )
     for results in all_results:
         domain = results.info.environment_info.domain_name
         if domain in domain_names:
@@ -541,6 +606,7 @@ def prepare_submission(
     console.print("\n📊 Computing metrics...", style="bold blue")
     domain_metrics: dict[str, AgentMetrics] = {}
     domain_results: dict[str, DomainResults] = {}
+    interaction_domain_metrics: dict[str, dict] = {}
     default_model = None
     default_user_simulator = None
     voice_config: Optional[VoiceConfig] = None
@@ -570,6 +636,12 @@ def prepare_submission(
             # Compute metrics for this trajectory file
             metrics = compute_metrics(results)
             domain_metrics[domain] = metrics
+
+            # Compute voice interaction metrics from the tick-level data
+            if is_voice:
+                interaction_domain_metrics[domain] = compute_metrics_for_loaded_results(
+                    results
+                )
 
             # Create DomainResults object
             def _pct(val: float | None) -> float | None:
@@ -651,6 +723,14 @@ def prepare_submission(
         default="standard",
     )
 
+    reasoning_effort = (
+        Prompt.ask(
+            "Reasoning effort level (e.g. high, medium, low, none, enabled)",
+            default="",
+        )
+        or None
+    )
+
     # Methodology information
     console.print("\n🔬 Methodology information:", style="dim")
     evaluation_date_str = Prompt.ask(
@@ -711,6 +791,49 @@ def prepare_submission(
         )
         references.append(Reference(title=ref_title, url=ref_url, type=ref_type))
         add_reference = Confirm.ask("Add another reference?", default=False)
+
+    # Model release info (optional)
+    console.print(
+        "\n📅 Model release info (optional, used to track progress over time):",
+        style="dim",
+    )
+    model_release: Optional[ModelRelease] = None
+    release_date_str = (
+        Prompt.ask(
+            "Model public release date (YYYY-MM-DD, distinct from evaluation date)",
+            default="",
+        )
+        or None
+    )
+    release_date_value: Optional[date] = None
+    if release_date_str:
+        try:
+            release_date_value = date.fromisoformat(release_date_str)
+        except ValueError:
+            console.print(
+                "  ⚠️  Invalid release date format, skipping model_release.",
+                style="yellow",
+            )
+            release_date_value = None
+
+    if release_date_value is not None:
+        announcement_url = (
+            Prompt.ask(
+                "Announcement URL (blog post, paper, model card, etc.)",
+                default="",
+            )
+            or None
+        )
+        announcement_title = None
+        if announcement_url:
+            announcement_title = (
+                Prompt.ask("Announcement title (link text in UI)", default="") or None
+            )
+        model_release = ModelRelease(
+            release_date=release_date_value,
+            announcement_url=announcement_url,
+            announcement_title=announcement_title,
+        )
 
     # Create submission objects
     contact_info = ContactInfo(email=email, name=contact_name, github=github_username)
@@ -800,6 +923,12 @@ def prepare_submission(
             trajectory_files_map[domain] = dest_name
 
     # Step 7: Write submission.json (after copy so trajectory_files_map is final)
+    interaction_metrics = None
+    if interaction_domain_metrics:
+        interaction_metrics = InteractionMetrics.model_validate(
+            build_interaction_metrics_block(interaction_domain_metrics)
+        )
+
     submission = Submission(
         model_name=model_name,
         model_organization=model_organization,
@@ -815,6 +944,9 @@ def prepare_submission(
         references=references if references else None,
         methodology=methodology,
         voice_config=voice_config,
+        interaction_metrics=interaction_metrics,
+        reasoning_effort=reasoning_effort,
+        model_release=model_release,
     )
 
     submission_file = submission_dir / SUBMISSION_FILE_NAME
@@ -864,3 +996,179 @@ def prepare_submission(
         f"[bold]{manifest_array}[/bold] array in manifest.json"
     )
     console.print("  5. Submit a pull request")
+
+
+def _judge_gaps(coverage) -> list[str]:
+    """One line per cell whose applicable judge measures are not all judged."""
+    lines = []
+    for cell in coverage:
+        if cell.complete or cell.summary is None:
+            continue
+        parts = []
+        for measure in cell.summary:
+            if measure.complete:
+                continue
+            reasons = [
+                f"{count} {label}"
+                for count, label in (
+                    (measure.not_judged_calls, "not judged"),
+                    (measure.error_calls, "judge errors"),
+                    (measure.missing_input_calls, "missing audio"),
+                )
+                if count
+            ]
+            parts.append(
+                f"{measure.measure} {measure.judged_calls}/"
+                f"{measure.applicable_calls} judged ({', '.join(reasons)})"
+            )
+        lines.append(f"  {cell.language}-{cell.domain}: " + "; ".join(parts))
+    if lines:
+        lines.insert(
+            0,
+            f"Judges: {len(lines)}/{len(coverage)} cells have applicable measures "
+            "without a usable saved verdict.",
+        )
+    return lines
+
+
+def _incomplete_message(root: Path, frame, summary, judge_coverage) -> str:
+    """Counts per cell plus the commands that fill each kind of gap."""
+    from tau2.metrics.benchmark import describe_reward_gaps
+
+    reward_lines = describe_reward_gaps(summary)
+    judge_lines = _judge_gaps(judge_coverage or [])
+    lines = [
+        f"Submission is incomplete for {frame.benchmark_version} ({root}).",
+        *reward_lines,
+        *judge_lines,
+        "To fill the gaps:",
+    ]
+    if reward_lines:
+        lines.append(
+            "  - Rerun the original `tau2 run ... --save-to <root>` command with "
+            "--auto-resume: it keeps finished calls, adds missing ones and retries "
+            "infrastructure errors. Unscored and unexpected-error calls are not "
+            "retried; remove them from the cell results first."
+        )
+    if judge_coverage is not None:
+        lines.append(
+            f"  - {'Then run' if reward_lines else 'Run'} `tau2 judges suite {root}`: "
+            "it judges only missing, stale and errored verdicts."
+        )
+    if any("missing audio" in line for line in judge_lines):
+        lines.append(
+            "  - Calls with missing audio cannot be judged: restore their saved "
+            "recordings (<cell>/tasks/task_<id>/sim_<id>/audio/both.wav) or rerun "
+            "those calls."
+        )
+    return "\n".join(lines)
+
+
+def _benchmark_package(root: Path, preset: str | None):
+    """Rewards (and, for judged benchmarks, diagnostics) from one saved matrix."""
+    from tau2.data_model.benchmark import BenchmarkFrame
+    from tau2.judges.submission import JUDGED_BENCHMARKS, collect_diagnostics
+    from tau2.judges.validation import production_catalog
+    from tau2.metrics.benchmark import IncompleteSubmissionError, export_submission
+    from tau2.runner.presets import infer_preset, verify_frame
+
+    frame = BenchmarkFrame.model_validate_json(
+        (root / "benchmark-frame.json").read_text()
+    )
+    preset = infer_preset(frame, preset)
+    verify_frame(frame, preset)
+    submission = export_submission(root, frame)
+    judge_coverage = diagnostics = None
+    if frame.benchmark_version in JUDGED_BENCHMARKS:
+        judge_coverage, diagnostics = collect_diagnostics(
+            root, frame, production_catalog([])
+        )
+    if not submission.summary.complete or (
+        judge_coverage is not None and diagnostics is None
+    ):
+        raise IncompleteSubmissionError(
+            _incomplete_message(root, frame, submission.summary, judge_coverage)
+        )
+    return submission, diagnostics
+
+
+def _recorded_agent(root: Path, frame) -> tuple[str | None, str]:
+    """The agent provider (voice only) and model recorded in the run conditions."""
+    for cell in frame.cells:
+        path = root / f"{cell.language}-{cell.domain}" / "results.json"
+        if not path.exists():
+            continue
+        conditions = TrajectoryResults.load_metadata(path).info.benchmark.conditions
+        audio = getattr(conditions, "audio_native_config", None)
+        if audio is not None:
+            return audio.provider, audio.model
+        return None, conditions.llm_agent
+    raise ValueError(f"{root} has no saved cells")
+
+
+def _matrix_package(root: Path, preset: str | None, submitter):
+    from tau2.scripts.leaderboard.benchmark_package import (
+        BenchmarkPackage,
+        PackageMetadata,
+    )
+
+    submission, diagnostics = _benchmark_package(root, preset)
+    provider, model = _recorded_agent(root, submission.frame)
+    return BenchmarkPackage(
+        metadata=PackageMetadata(
+            **submitter.model_dump(), agent_provider=provider, agent_model=model
+        ),
+        submission=submission,
+        diagnostics=diagnostics,
+    ).check()
+
+
+def prepare_benchmark_submission(
+    root: Path, output: Path, metadata_file: Path, preset: str | None = None
+) -> Path:
+    """Export a complete frozen matrix as ``<output>/<name>/``; nothing is copied.
+
+    Judged benchmarks (Voice V2) also require every applicable judge measure in
+    every cell to have a saved verdict from ``tau2 judges suite``. The saved
+    matrix stays with the submitter for independent validation.
+    """
+    from tau2.scripts.leaderboard.benchmark_package import SubmitterMetadata
+
+    submitter = SubmitterMetadata.model_validate_json(metadata_file.read_text())
+    package = _matrix_package(root, preset, submitter)
+    destination = output / package.name
+    package.write(destination)
+    print(f"Saved {destination}")
+    print(f"Check it with: tau2 submit validate {destination} --results {root}")
+    return destination
+
+
+def validate_benchmark_submission(
+    directory: Path, results: Path, preset: str | None = None
+):
+    """Recompute rewards, judge diagnostics and agent identity from the matrix."""
+    from tau2.scripts.leaderboard.benchmark_package import (
+        SubmitterMetadata,
+        load_package,
+    )
+
+    package = load_package(directory)
+    if package.metadata.evidence != "matrix":
+        raise ValueError(
+            f"{directory} cites {package.metadata.evidence} evidence; validate it "
+            "with --historical-voice-v2"
+        )
+    submitter = SubmitterMetadata.model_validate(
+        package.metadata.model_dump(include=set(SubmitterMetadata.model_fields))
+    )
+    expected = _matrix_package(results, preset, submitter)
+    expected.metadata.trajectories = package.metadata.trajectories
+    if expected.submission.frame != package.submission.frame:
+        raise ValueError("Submission frame differs from the original saved matrix")
+    if expected.submission != package.submission:
+        raise ValueError("Submission differs from original saved result evidence")
+    if expected.diagnostics != package.diagnostics:
+        raise ValueError("Judge diagnostics differ from the original saved verdicts")
+    if expected.metadata != package.metadata:
+        raise ValueError("Recorded agent identity differs from the saved matrix")
+    return package

@@ -35,6 +35,7 @@ from tau2.config import (
 )
 from tau2.data_model.audio import AudioFormat
 from tau2.data_model.message import ToolCall
+from tau2.data_model.usage import UsageRecord
 from tau2.environment.tool import Tool
 from tau2.voice.audio_native.adapter import DiscreteTimeAdapter
 from tau2.voice.audio_native.async_loop import BackgroundAsyncLoop
@@ -68,8 +69,11 @@ class DiscreteTimeOpenAIAdapter(DiscreteTimeAdapter):
         tick_duration_ms: int,
         send_audio_instant: bool = False,
         model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
         provider: Optional[OpenAIRealtimeProvider] = None,
         audio_format: Optional[AudioFormat] = None,
+        voice: Optional[str] = None,
+        transcription_language: Optional[str] = None,
     ):
         super().__init__(
             tick_duration_ms,
@@ -84,7 +88,10 @@ class DiscreteTimeOpenAIAdapter(DiscreteTimeAdapter):
         if model is not None and provider is not None:
             raise ValueError("model and provider cannot be provided together")
 
+        self.voice = voice
+        self.transcription_language = transcription_language
         self.model = model
+        self.reasoning_effort = reasoning_effort
         self._provider = provider
         self._owns_provider = provider is None
 
@@ -94,7 +101,12 @@ class DiscreteTimeOpenAIAdapter(DiscreteTimeAdapter):
     @property
     def provider(self) -> OpenAIRealtimeProvider:
         if self._provider is None:
-            self._provider = OpenAIRealtimeProvider(model=self.model)
+            self._provider = OpenAIRealtimeProvider(
+                model=self.model,
+                reasoning_effort=self.reasoning_effort,
+                voice=self.voice,
+                transcription_language=self.transcription_language,
+            )
         return self._provider
 
     @property
@@ -324,6 +336,15 @@ class DiscreteTimeOpenAIAdapter(DiscreteTimeAdapter):
 
         elif isinstance(event, ResponseDoneEvent):
             logger.debug("Response done")
+            if event.usage:
+                self.record_usage(
+                    UsageRecord.from_openai_realtime_usage(
+                        event.usage,
+                        provider="openai",
+                        model=self.model or self.provider.model,
+                        scope_id=event.response_id,
+                    )
+                )
 
         else:
             logger.debug(f"Event {event.type} received")
