@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional
 
+from tau2.data_model.semantic_communication import CommunicateScoring
 from tau2.data_model.simulation import RewardInfo, SimulationRun, TerminationReason
 from tau2.data_model.tasks import RewardType, Task
 from tau2.environment.toolkit import ToolType, get_tool_types
@@ -51,16 +52,19 @@ class EvaluationType(str, Enum):
         Use when you only care about which tools the agent called.
 
     ALL:
-        Evaluate ENV, COMMUNICATE, and ACTION, but only include each in the
-        final reward if it's part of the task's `reward_basis`. The final
-        reward is the product of all applicable component rewards.
+        Evaluate ENV and ACTION, plus COMMUNICATE and NL_ASSERTIONS when in
+        the task's `reward_basis`. Only includes each component in the final
+        reward if it's part of that basis. The final reward is the product
+        of all applicable component rewards.
 
     NL_ASSERTIONS:
         Evaluate only natural language assertions (WIP).
         Use for qualitative LLM-judged evaluation criteria.
 
     ALL_WITH_NL_ASSERTIONS:
-        Like ALL, but also includes NL_ASSERTIONS if in the reward_basis (WIP).
+        Like ALL, but forces the NL assertions evaluator to run even when
+        NL_ASSERTION is not in the task's `reward_basis`. Useful for
+        debugging or previewing NL assertion results.
 
     ALL_IGNORE_BASIS:
         Evaluate ENV, COMMUNICATE, and ACTION, ignoring the task's reward_basis.
@@ -90,6 +94,10 @@ def evaluate_simulation(
     domain: str,
     mode: CommunicationMode = CommunicationMode.HALF_DUPLEX,
     env_kwargs: dict = None,
+    strict_replay: bool = True,
+    *,
+    communicate_scoring: CommunicateScoring,
+    customer_language: Optional[str] = None,
 ) -> RewardInfo:
     """
     Evaluate the simulation based on the evaluation type.
@@ -103,6 +111,11 @@ def evaluate_simulation(
         mode: The communication mode (HALF_DUPLEX or FULL_DUPLEX).
               Defaults to HALF_DUPLEX. In FULL_DUPLEX mode, evaluation uses
               simulation.ticks instead of simulation.messages.
+        strict_replay: Whether the environment replay should raise when a
+              replayed tool call's output differs from the recorded one.
+              Live evaluation keeps the default (True); trajectory re-grading
+              passes False so recorded outputs that cosmetically predate
+              current tool code do not abort the replay.
 
     Returns:
         RewardInfo with the evaluation results.
@@ -166,6 +179,7 @@ def evaluate_simulation(
             full_trajectory=trajectory,
             solo_mode=solo_mode,
             env_kwargs=env_kwargs,
+            strict_replay=strict_replay,
         )
     elif evaluation_type == EvaluationType.NL_ASSERTIONS:
         reward_info = NLEvaluator.calculate_reward(
@@ -176,6 +190,8 @@ def evaluate_simulation(
         reward_info = CommEvaluator.calculate_reward(
             task=task,
             full_trajectory=trajectory,
+            scoring=communicate_scoring,
+            customer_language=customer_language,
         )
     elif evaluation_type == EvaluationType.ACTION:
         reward_info = ActEvaluator.calculate_reward(
@@ -190,18 +206,24 @@ def evaluate_simulation(
             full_trajectory=trajectory,
             solo_mode=solo_mode,
             env_kwargs=env_kwargs,
+            strict_replay=strict_replay,
         )
         action_reward_info = ActEvaluator.calculate_reward(
             task=task,
             full_trajectory=trajectory,
             tool_types=tool_types,
         )
-        communicate_reward_info = CommEvaluator.calculate_reward(
-            task=task,
-            full_trajectory=trajectory,
-        )
+        communicate_reward_info = None
+        if RewardType.COMMUNICATE in task.evaluation_criteria.reward_basis:
+            communicate_reward_info = CommEvaluator.calculate_reward(
+                task=task,
+                full_trajectory=trajectory,
+                scoring=communicate_scoring,
+                customer_language=customer_language,
+            )
         nl_reward_info = None
-        if evaluation_type == EvaluationType.ALL_WITH_NL_ASSERTIONS:
+        task_needs_nl = RewardType.NL_ASSERTION in task.evaluation_criteria.reward_basis
+        if evaluation_type == EvaluationType.ALL_WITH_NL_ASSERTIONS or task_needs_nl:
             nl_reward_info = NLEvaluator.calculate_reward(
                 task=task,
                 full_trajectory=trajectory,
@@ -215,6 +237,18 @@ def evaluate_simulation(
         comm_bases = {RewardType.COMMUNICATE}
         task_reward_basis = set(task.evaluation_criteria.reward_basis)
 
+        evaluated_bases = env_bases | action_bases
+        if communicate_reward_info is not None:
+            evaluated_bases |= comm_bases
+        if nl_reward_info is not None:
+            evaluated_bases |= nl_bases
+        unevaluated = task_reward_basis - evaluated_bases
+        if unevaluated:
+            raise ValueError(
+                f"Task reward_basis includes {unevaluated} but these were "
+                f"not evaluated. evaluation_type={evaluation_type.value}"
+            )
+
         reward_breakdown = {}
         if task_reward_basis & env_bases:
             if env_reward_info.reward_breakdown is not None:
@@ -225,14 +259,10 @@ def evaluate_simulation(
                 reward_breakdown.update(action_reward_info.reward_breakdown)
             reward *= action_reward_info.reward
         if task_reward_basis & nl_bases:
-            if evaluation_type != EvaluationType.ALL_WITH_NL_ASSERTIONS:
-                raise ValueError(
-                    "NL assertions are part of the reward basis, but they are not being evaluated."
-                )
             if nl_reward_info.reward_breakdown is not None:
                 reward_breakdown.update(nl_reward_info.reward_breakdown)
             reward *= nl_reward_info.reward
-        if task_reward_basis & comm_bases:
+        if communicate_reward_info is not None:
             if communicate_reward_info.reward_breakdown is not None:
                 reward_breakdown.update(communicate_reward_info.reward_breakdown)
             reward *= communicate_reward_info.reward
@@ -245,13 +275,19 @@ def evaluate_simulation(
             nl_assertions=(
                 nl_reward_info.nl_assertions if nl_reward_info is not None else None
             ),
-            communicate_checks=communicate_reward_info.communicate_checks,
+            communicate_checks=(
+                communicate_reward_info.communicate_checks
+                if communicate_reward_info is not None
+                else None
+            ),
             reward_basis=task.evaluation_criteria.reward_basis,
             reward_breakdown=reward_breakdown,
             info={
                 "env": env_reward_info.info,
                 "nl": nl_reward_info.info if nl_reward_info is not None else None,
-                "communicate": communicate_reward_info.info,
+                "communicate": communicate_reward_info.info
+                if communicate_reward_info is not None
+                else None,
                 "action": action_reward_info.info,
             },
         )
@@ -274,6 +310,8 @@ def evaluate_simulation(
         communicate_reward_info = CommEvaluator.calculate_reward(
             task=task,
             full_trajectory=trajectory,
+            scoring=communicate_scoring,
+            customer_language=customer_language,
         )
         nl_reward_info = None
         if evaluation_type == EvaluationType.ALL_WITH_NL_ASSERTIONS_IGNORE_BASIS:

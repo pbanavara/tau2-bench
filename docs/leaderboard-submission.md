@@ -1,236 +1,433 @@
-# Leaderboard Submission Guide
+# Submission guide
 
-Submit your agent results to the τ-bench leaderboard at **[taubench.com](https://taubench.com)**.
+This guide covers submitting results to the τ-bench leaderboard at
+**[taubench.com](https://taubench.com)**. There are four paths, one per
+benchmark generation:
 
-| Modality | Description | Guide |
-|----------|-------------|-------|
-| **Text** | Standard text-based half-duplex evaluation | This page (below) |
-| **Voice** | Audio-native full-duplex evaluation (τ-voice) | [Voice Submissions](#voice-submissions-τ-voice) |
+| You ran | Package | Leaderboard tab | Section |
+|---|---|---|---|
+| `text-v1` (2.0 text, 18 cells) | `benchmark-submission.json` | 2.0 | [2.0 benchmarks](#20-benchmarks-text-v1-voice-v2-banking-and-entity) |
+| `voice-v2` (2.0 voice, τ-i18n, 18 cells) | `benchmark-submission.json` + `benchmark-diagnostics.json` | 2.0 | [2.0 benchmarks](#20-benchmarks-text-v1-voice-v2-banking-and-entity) |
+| `voice-v2-banking` / `voice-v2-entity` (6 languages) | `benchmark-submission.json` | 2.0 (Banking, Intake) | [Banking and τ-entity](#banking-and-τ-entity-voice) |
+| `voice-v1` (English voice, 3 domains) | `submission.json` | English voice | [voice-v1](#voice-v1-english-voice) |
+| 1.x text or voice (v1.0.1) | `submission.json` | 1.x | [1.x submissions](#1x-submissions) |
 
-> **Submitting voice results?** Voice evaluation requires specialized infrastructure and is handled case-by-case. Skip to the [Voice Submissions](#voice-submissions-τ-voice) section.
+1.x and 2.0 results are not comparable (see
+[Comparing with v1.0.1](../CHANGELOG.md#upgrading-from-1x)), so they are shown on
+separate leaderboard tabs. 1.x submissions are still accepted.
+
+Every path ends the same way: validate locally, upload the trajectories to
+external storage, and open a pull request. Terms such as *cell*, *frame* and
+*judge* are defined in the [glossary](glossary.md).
+
+## Rules for every submission
+
+- **Same configuration throughout.** Use one agent model and one user simulator,
+  with identical arguments, for every domain and cell.
+- **Complete runs.** Do not filter tasks with `--num-tasks` or `--task-ids`. The
+  2.0 commands refuse incomplete runs; for 1.x, each domain should appear once
+  with all of its tasks.
+- **Trials.** The 2.0 benchmarks and voice-v1 are scored at one trial (pass@1).
+  For 1.x text, at least 4 trials per domain are strongly preferred.
+- **Voice speech complexity.** Voice submissions use `--speech-complexity regular`
+  (the default).
+- **Use your own caller voices** for voice runs. See
+  [Voice personas](voice-personas.md).
+
+### Standard and custom submissions
+
+A **standard** submission uses the default benchmark-side setup for its track:
+the standard tasks, policies, tools, user simulator and evaluator, with no
+benchmark-side changes to prompts, tools, orchestration, task selection or
+grading, no access to hidden task data, and a model that was not trained on
+τ-bench tasks, rewards or evaluation data. The system under test can be built
+however you like behind the agent interface:
+
+- **Text.** A general-purpose LLM through the default τ-bench agent scaffold.
+  Adding a planner, router, extra agent, custom tool or modified control flow on
+  the benchmark side makes the submission custom.
+- **Voice.** One voice agent behind the standard τ-voice interface. Proprietary
+  ASR and TTS, multiple models, internal prompts and tools, and routing are fine
+  as long as they live inside the submitted system. A transport adapter that
+  only connects the system to the standard interface is allowed.
+
+A **custom** submission changes the benchmark-side setup, for example:
+
+- multi-model routers, ensembles or additional agents in the benchmark-side code;
+- tools beyond the standard tool set;
+- modified orchestration, control flow, prompts or system instructions;
+- a non-default user simulator, task selection, speech configuration or
+  evaluation protocol;
+- a model trained or fine-tuned on τ-bench domains, tasks, rewards or
+  evaluation data.
+
+Custom submissions must set `submission_type` to `"custom"`, explain the changes
+in `methodology.notes`, link the implementation in `references`, and set
+`methodology.verification.modified_prompts` to `true` if any benchmark prompt
+changed.
 
 ---
 
-## Text Submissions
+## 2.0 benchmarks (text-v1, voice-v2, banking and entity)
 
-### Requirements
+A 2.0 submission is built from one saved matrix root. `tau2 submit prepare`
+detects the benchmark from the root's `benchmark-frame.json`, so `--benchmark`
+is optional; pass it only to assert which benchmark you expect. See
+[Running the benchmark](running-the-benchmark.md) for run details.
 
-Your submission should meet these constraints:
-
-1. **Domain coverage** — we recommend including results for all three core domains (`retail`, `airline`, `telecom`). You may submit results for a single domain, but the leaderboard's "Overall" column only appears when all four domains (including `banking_knowledge`) have Pass^1 scores
-2. **Consistent model configuration** — all trajectory files must use the same agent LLM and user simulator LLM with identical arguments across all domains
-3. **One result per domain** — each domain should appear exactly once
-4. **All tasks completed** — run evaluation on all tasks within each domain (don't use `--task-ids` or `--num-tasks` filters)
-5. **4+ trials** — we strongly prefer results with at least 4 trials per domain for statistical reliability
-
-> **Note**: Use the `base` task split (default) when evaluating your agent to ensure you're testing on the complete, standard task set consistent with the original τ-bench methodology.
-
-## Submission Types: Standard vs Custom
-
-The leaderboard distinguishes between two types of submissions:
-
-### Standard Submissions (Default)
-
-Standard submissions evaluate a **general-purpose LLM** using the **default τ-bench scaffold**:
-- A general-purpose LLM as the agent (not specifically trained for this benchmark)
-- The standard tool set provided by τ-bench
-- Default prompts and evaluation protocol
-- No modifications to the evaluation setup
-
-If you're evaluating an off-the-shelf LLM using τ-bench as documented without modifications, your submission is **standard**. You don't need to specify `submission_type` in your JSON (it defaults to `"standard"`).
-
-### Custom Submissions
-
-Custom submissions include **any approach that differs from the standard evaluation**, such as:
-
-**Modified Scaffolds:**
-- Multi-model routers or model ensembles
-- Additional tools beyond the standard τ-bench tool set
-- Modified agent orchestration or control flow
-- Modified prompts or system instructions
-
-**Domain-Specific Training:**
-- Models trained or fine-tuned specifically on τ-bench domains (airline, retail, telecom customer service)
-- Models trained using τ-bench tasks, reward signals, or evaluation data
-- Models where training data significantly overlaps with τ-bench evaluation scenarios
-
-Custom submissions **must** include detailed methodology documentation:
-
-1. **Set `submission_type` to `"custom"`** in your `submission.json`
-2. **Provide comprehensive `methodology.notes`** explaining what modifications were made, why, and how the custom system works at a high level
-3. **Link to your implementation** in the `references` array (GitHub repo, paper, blog post)
-4. **Set `methodology.verification.modified_prompts` to `true`** if you modified any prompts
-
-## Step 1: Run Evaluations
-
-Run your agent on all domains with consistent settings:
+### Voice-v2
 
 ```bash
-tau2 run --domain retail --agent-llm gpt-4.1 --user-llm gpt-4.1 --num-trials 4 --save-to my_model_retail
-tau2 run --domain airline --agent-llm gpt-4.1 --user-llm gpt-4.1 --num-trials 4 --save-to my_model_airline
-tau2 run --domain telecom --agent-llm gpt-4.1 --user-llm gpt-4.1 --num-trials 4 --save-to my_model_telecom
+# 1. Run the released voice benchmark. Repeat the same command (it resumes) to
+#    fill missing calls and retry infrastructure errors.
+tau2 run --audio-native --audio-native-model <model> --save-to voice-run
+
+# 2. Judge every cell. Resumable: it judges only missing, stale and errored verdicts.
+tau2 judges suite data/simulations/voice-run
+
+# 3. Optional: check judge coverage without model calls.
+tau2 judges summarize data/simulations/voice-run
+
+# 4. Build the package. Refuses, with per-cell counts and fill commands, if incomplete.
+tau2 submit prepare data/simulations/voice-run --output ./submissions \
+  --metadata-file ./submitter.json
+
+# 5. Recompute rewards, judge diagnostics and agent identity from the saved matrix.
+tau2 submit validate ./submissions/<name> --results data/simulations/voice-run
 ```
 
-**Important**: Use identical `--agent-llm`, `--user-llm`, and their arguments across all runs. You can use any LLM as the user simulator, but this choice will be reported on the leaderboard. We recommend using `gpt-5.2` as the user simulator for the most accurate results.
+`submitter.json` names the submission (see [Package metadata](#package-metadata)).
+`prepare` writes the package to `./submissions/<name>/`, where `<name>` is
+`{model_name}_{model_organization}_{submission_date}` in lowercase letters,
+numbers and hyphens.
 
-Trajectory files are saved in `data/simulations/`.
+`prepare` refuses unless every cell's rewards are complete and every applicable
+judge measure in every cell has a usable saved verdict. It reads saved results
+and verdicts only; it never calls a model. An incomplete run exits with code 1
+and a message like this:
 
-### Banking Knowledge Domain
+```
+Error: Submission is incomplete for voice-v2 (data/simulations/voice-run).
+Rewards: 60/900 calls lack a scored reward (60 missing, 0 errored, 0 unscored).
+  pt-retail: 10 missing
+  ko-telecom: 50 missing
+Judges: 1/18 cells have applicable measures without a usable saved verdict.
+  zh-airline: naturalness 48/50 judged (2 not judged)
+To fill the gaps:
+  - Rerun the original `tau2 run ... --save-to <root>` command with --auto-resume: ...
+  - Then run `tau2 judges suite data/simulations/voice-run`: it judges only missing, stale and errored verdicts.
+```
 
-The banking domain requires a retrieval configuration for the knowledge base. You must include a `retrieval_config` field in your `banking_knowledge` results specifying which retrieval method was used.
+Only the default production judge catalog is accepted. Verdicts made with
+`--registry` bundles have a different catalog revision and will not validate.
+
+### Text-v1
 
 ```bash
-# Banking domain with terminal-based retrieval
-tau2 run --domain banking_knowledge --retrieval-config terminal_use --agent-llm gpt-4.1 --user-llm gpt-4.1 --num-trials 4
+# 1. Run the released text benchmark (repeat the same command to resume).
+tau2 run --benchmark text --agent-llm <model> --agent-llm-args '<json>' --save-to text-run
 
-# Banking domain with BM25 retrieval
-tau2 run --domain banking_knowledge --retrieval-config bm25 --agent-llm gpt-4.1 --user-llm gpt-4.1 --num-trials 4
+# 2. Build the package (rewards only; no judges needed).
+tau2 submit prepare data/simulations/text-run --output ./submissions \
+  --metadata-file ./submitter.json
+
+# 3. Recompute rewards from the saved matrix.
+tau2 submit validate ./submissions/<name> --results data/simulations/text-run
 ```
 
-Common `retrieval_config` values:
+The leaderboard has no 2.0 text tab yet. Text-v1 packages validate the same
+way, but `manifest.json` has no entry for them; open an issue before submitting
+one.
+
+### Banking and τ-entity (voice)
+
+`voice-v2-banking` (`--benchmark banking`, 582 calls) and `voice-v2-entity`
+(`--benchmark entity`, 1200 calls) cover all six languages. Each is its own
+matrix root and its own package, scored on rewards only.
+
+```bash
+# 1. Run the released benchmark (repeat the same command to resume).
+tau2 run --audio-native --benchmark banking --audio-native-model <model> --save-to banking-run
+tau2 run --audio-native --benchmark entity --audio-native-model <model> --save-to entity-run
+
+# 2. Build each package (rewards only; no judges needed).
+tau2 submit prepare data/simulations/banking-run --output ./submissions \
+  --metadata-file ./submitter.json
+
+# 3. Recompute rewards from the saved matrix.
+tau2 submit validate ./submissions/<name> --results data/simulations/banking-run
+```
+
+Banking always runs with the `alltools` retrieval config, and entity with the
+agent-directed strategy. Other retrieval configs and the scaffolded strategy
+are custom runs (`--benchmark none`) and have no 2.0 package.
+
+Submit each package as for voice-v2 (see [Submit a 2.0 package](#submit-a-20-package)),
+but list it in the `voice_v2_domain_submissions` array of `manifest.json`. It
+fills the Banking or Intake row of your voice-v2 row when the model name,
+organization, agent provider, agent model and submission type all match; it
+never changes Overall. A banking or entity package without a voice-v2 package
+is shown only when its domain is selected.
+
+### What the 2.0 package contains
+
+| File | Benchmarks | Contents |
+|---|---|---|
+| `benchmark-submission.json` | text-v1, voice-v2 | The frozen frame, every task/trial observation, the per-cell, per-language and per-domain reward summary, and a SHA-256 of each cell's `results.json`. |
+| `benchmark-diagnostics.json` | voice-v2 only | The judge catalog and transport revisions, each judge contract used, and per cell: the same per-measure summary `tau2 judges summarize` prints, plus a fingerprint for every judged call × measure (`verdict_sha256` is the SHA-256 of the stored verdict). |
+| `benchmark-metadata.json` | text-v1, voice-v2 | Your `submitter.json` fields, plus the agent provider and model recorded in the run conditions. Maintainers add `trajectories` (the S3 prefix) after upload. Schema: [`schema_benchmark_metadata.json`](../web/leaderboard/public/submissions/schema_benchmark_metadata.json). |
+
+The leaderboard reads these three files directly. A package must be complete:
+every cell scored, and, for voice-v2, diagnostics for every cell.
+
+The package does not copy trajectories or audio. Maintainers validate it against
+your saved matrix root, which you upload separately (next step). `validate`
+rejects changed membership, incompatible conditions, duplicate trials, missing
+evidence, and summaries that disagree with the saved results or verdicts.
+
+### Package metadata
+
+```json
+{
+  "model_name": "my-voice-model",
+  "model_organization": "Example Labs",
+  "submitting_organization": "Example Labs",
+  "submission_date": "2026-10-20",
+  "contact_info": {"email": "you@example.org", "name": "Your Name"},
+  "submission_type": "standard",
+  "references": [{"title": "Model card", "url": "https://example.org/model"}],
+  "notes": "How the agent was configured and run."
+}
+```
+
+`model_name`, `model_organization`, `submitting_organization`,
+`submission_date` and `contact_info.email` are required. `submission_type` is
+`"standard"` (default) or `"custom"` (see
+[Standard and custom submissions](#standard-and-custom-submissions)); explain a
+custom setup in `notes` and link it in `references`. Unknown fields are rejected.
+
+### Submit a 2.0 package
+
+1. **Upload the matrix root** (for example `data/simulations/voice-run/`) to
+   external storage you can share a link to: Google Drive, Hugging Face,
+   institutional storage. Upload the whole root: `benchmark-frame.json`,
+   `benchmark-plan.json`, `execution.json` and every cell directory with its
+   `results.json`, `simulations/`, `artifacts/` (audio) and `diagnostics/`.
+2. **Add the package to the repository** as
+   `web/leaderboard/public/submissions/<name>/` (the three files `prepare`
+   wrote), and add `<name>` to the `voice_v2_submissions` array in
+   `web/leaderboard/public/submissions/manifest.json`. Commit only the package
+   files, never the trajectories.
+3. **Open a pull request** (see [Pull request](#pull-request)) with the link to
+   the uploaded matrix root. Maintainers run `tau2 submit validate` against it,
+   then copy the matrix to
+   `s3://sierra-tau-bench-public/submissions/<name>/trajectories/<language>/<domain>/`.
+
+voice-v2 packages appear as rows of the τ³-Voice **τ-i18n (Multilingual)**
+leaderboard (`/leaderboard?benchmark=voice`), next to the paper cohort and
+marked "submission". They rank on task completion (pass@1, overall or for the
+selected language); Interaction and Generation quality are paper-cohort
+measures and show "—". A package's breakdown shows pass@1 per language × domain and each
+judge measure per language with its coverage. Judge measures are diagnostics
+and never change the rank. 1.x and voice-v1 submissions keep their own tabs and
+are still accepted.
+
+The frozen 2026-10-02 voice-v2 release calls predate the matrix layout. A
+maintainer-only adapter, `tau2 submit prepare --historical-voice-v2`, reads
+those saved exports and writes the same three-file package; see
+[Voice V2 release packages](voice-v2-publication.md).
+
+---
+
+## Voice-v1 (English voice)
+
+Voice-v1 is the English frame behind the current English voice leaderboard:
+50 airline, 114 retail and 114 telecom tasks, one trial.
+
+```bash
+# 1. Run the frame (all three domains, or repeat with --domain for one at a time).
+tau2 run --audio-native --benchmark voice-v1 \
+  --audio-native-provider <provider> --audio-native-model <model> \
+  --save-to voice-v1-run
+
+# 2. Prepare a leaderboard submission from the cell directories.
+tau2 submit prepare \
+  data/simulations/voice-v1-run/en-airline \
+  data/simulations/voice-v1-run/en-retail \
+  data/simulations/voice-v1-run/en-telecom \
+  --output ./voice-v1-submission
+
+# 3. Validate it.
+tau2 submit validate ./voice-v1-submission/<name>
+```
+
+Point `prepare` at the cell directories, not the matrix root. Given the root, it
+builds a 2.0-style package instead of the leaderboard `submission.json`. Single-domain submissions are allowed; each domain must be
+complete.
+
+For voice, `prepare`:
+
+1. keeps only `regular` speech-complexity results;
+2. converts results to the directory layout (`results.json` + `simulations/`);
+3. copies only the audio of each task's canonical simulation;
+4. records `voice_config` (provider, model, tick duration, user TTS) in
+   `submission.json`;
+5. computes `interaction_metrics` (latency, responsiveness, interruptions,
+   selectivity; see [Interaction metrics](interaction-metrics.md)); maintainers
+   recompute these from your trajectories;
+6. sets `modality: "voice"` and asks for the voice user-simulator version.
+
+Then follow the [leaderboard steps](#leaderboard-steps-voice-v1-and-1x), using
+the `voice_submissions` array.
+
+If the provider you want to evaluate has no adapter in
+`src/tau2/voice/audio_native/`, implement one (see the existing providers), open
+a PR with it, and contact us.
+
+---
+
+## 1.x submissions
+
+1.x results are still accepted and appear on the 1.x tab. To produce scores
+comparable to the existing 1.x leaderboard, run from the
+[`v1.0.1`](https://github.com/sierra-research/tau2-bench/releases/tag/v1.0.1)
+release, not from 2.0:
+
+```bash
+git checkout v1.0.1
+uv sync
+```
+
+Run every domain with the same settings:
+
+```bash
+tau2 run --domain retail  --agent-llm <model> --user-llm <user-model> --num-trials 4 --save-to my_model_retail
+tau2 run --domain airline --agent-llm <model> --user-llm <user-model> --num-trials 4 --save-to my_model_airline
+tau2 run --domain telecom --agent-llm <model> --user-llm <user-model> --num-trials 4 --save-to my_model_telecom
+tau2 run --domain banking_knowledge --retrieval-config alltools \
+  --agent-llm <model> --user-llm <user-model> --num-trials 4 --save-to my_model_banking
+```
+
+The user-simulator model is reported on the leaderboard.
+
+**`banking_knowledge`** needs a retrieval configuration, recorded as
+`retrieval_config` in its results and shown as a badge:
 
 | Config | Description |
-|--------|-------------|
-| `terminal_use` | Agent navigates the knowledge base via shell commands (grep, cat, find, etc.) |
-| `openai_embeddings` | Dense retrieval using OpenAI's text-embedding-3-large model |
-| `qwen_embeddings` | Dense retrieval using Qwen3-Embedding model |
-| `bm25` | Sparse retrieval using BM25 |
+|---|---|
+| `alltools` | BM25 + OpenAI dense retrieval + shell access |
+| `alltools-qwen` | BM25 + Qwen dense retrieval + shell access |
+| `terminal_use` | Shell navigation of the knowledge base (grep, cat, find) |
+| `openai_embeddings` | Dense retrieval with OpenAI `text-embedding-3-large` |
+| `qwen_embeddings` | Dense retrieval with Qwen3-Embedding |
+| `bm25` | Sparse BM25 retrieval |
 
-If you use a different retrieval method, use a short descriptive string (e.g., `"custom_reranker"`) and document it in `methodology.notes`. The `retrieval_config` value is displayed as a badge on the leaderboard.
+For another method, use a short descriptive string (for example
+`"custom_reranker"`) and describe it in `methodology.notes`.
 
-### Cost Tracking (Optional but Recommended)
+**Cost (optional).** Report the average cost per trajectory in USD in each
+domain's `cost` field, and describe how you computed it in `methodology.notes`.
 
-To enable fair comparisons between models with different pricing structures, we encourage submitting cost information:
-
-1. Calculate average cost per trajectory for each domain
-2. Include costs in USD using the optional `cost` field in your results
-3. Document your cost calculation method in `methodology.notes` if using custom cost tracking
-
-## Step 2: Prepare Submission Package
-
-Use the CLI to prepare your submission automatically:
+Prepare and validate:
 
 ```bash
 tau2 submit prepare \
   data/simulations/my_model_retail \
   data/simulations/my_model_airline \
   data/simulations/my_model_telecom \
+  data/simulations/my_model_banking \
   --output ./my_submission
+
+tau2 submit validate ./my_submission/<name>
 ```
 
-This will:
-- Find `results.json` in each simulation directory
-- Verify all trajectory files are valid
-- Check that submission requirements are met
-- Compute performance metrics (Pass^k rates)
-- Prompt for required metadata (model name, organization, contact email)
-- Create a structured submission directory with:
-  - `submission.json` — metadata and metrics
-  - `trajectories/` — your trajectory files (to be shared externally, not committed to the repo)
+`prepare` verifies the trajectory files, checks the requirements above, computes
+pass^k, asks for the model name, organization and contact email, and writes
+`submission.json` plus a `trajectories/` directory. `--no-verify` skips
+trajectory verification while you iterate. To check trajectory files on their
+own, use `tau2 submit verify-trajs <paths...>`.
 
-To skip verification (e.g., for faster iteration):
+1.x voice submissions follow the [voice-v1](#voice-v1-english-voice) steps
+from the 1.x release.
 
-```bash
-tau2 submit prepare ... --output ./my_submission --no-verify
-```
+---
 
-## Step 3: Validate Your Submission
+## Leaderboard steps (voice-v1 and 1.x)
 
-```bash
-tau2 submit validate ./my_submission
-```
+### 1. Create the submission directory
 
-This verifies:
-- All required files are present
-- Trajectory files are valid
-- Domain coverage is complete
-- Model configurations are consistent
-- Metrics match trajectory data
-
-You can also verify individual trajectory files without a full submission:
-
-```bash
-tau2 submit verify-trajs \
-  data/simulations/my_model_retail \
-  data/simulations/my_model_airline \
-  data/simulations/my_model_telecom
-```
-
-## Step 4: Create Your Submission Directory
-
-1. Create a directory under `web/leaderboard/public/submissions/`
-2. Name your directory using the format: `{model_name}_{model_organization}_{submission_date}`
-   - Use lowercase letters, numbers, hyphens, and underscores only
-   - Examples: `gpt-4.1_openai_2025-01-15`, `custom-model-v1_mycompany_2025-01-20`
-3. Add only the `submission.json` file to the directory
-
-Directory structure in the repo:
+Copy `submission.json` (only) to
+`web/leaderboard/public/submissions/<name>/`, where `<name>` is
+`{model_name}_{model_organization}_{submission_date}` in lowercase letters,
+numbers, hyphens and underscores, for example `gpt-4.1_openai_2025-01-15`.
 
 ```
 web/leaderboard/public/submissions/my-model_myorg_2025-01-15/
 └── submission.json
 ```
 
-> **Note:** Trajectory files are **not** committed to the repo — they are hosted on S3. Upload your trajectory files to an external service (Google Drive, HuggingFace, institutional storage, etc.) and include the download link in your PR description. A maintainer will upload them to S3 after review. Your shared trajectory files should follow this structure:
->
-> **Text submissions:**
-> ```
-> trajectories/
-> ├── my-model_airline_default_gpt-4o_4trials.json
-> ├── my-model_retail_default_gpt-4o_4trials.json
-> ├── my-model_telecom_default_gpt-4o_4trials.json
-> └── my-model_banking_knowledge_gpt-4o_4trials.json
-> ```
->
-> **Voice submissions** (directory-based format, one experiment directory per domain):
-> ```
-> trajectories/
-> └── <experiment_name>/
->     ├── results.json       # Metadata only
->     ├── simulations/       # Individual simulation data
->     └── artifacts/         # Audio files
-> ```
->
-> Keep the original structure as generated by `tau2 submit prepare`.
+### 2. Update the manifest
 
-## Step 5: Update the Manifest
+Add `<name>` to the matching array in
+`web/leaderboard/public/submissions/manifest.json`:
 
-Add your directory name to the `submissions` array in `web/leaderboard/public/submissions/manifest.json`:
+| Array | Use for |
+|---|---|
+| `submissions` | 1.x text submissions |
+| `voice_submissions` | voice submissions (voice-v1, 1.x voice) |
+| `legacy_submissions` | original τ-bench v1 task set; maintainers only |
 
 ```json
 {
-  "submissions": [
-    "existing-submission_org_2024-12-01",
-    "my-model_myorg_2025-01-15"
-  ],
-  "legacy_submissions": [
-    "older-model_org_2024-06-20"
-  ]
+  "submissions": ["existing-submission_org_2024-12-01", "my-model_myorg_2025-01-15"],
+  "voice_submissions": ["my-voice-model_myorg_2026-03-01"],
+  "legacy_submissions": ["older-model_org_2024-06-20"]
 }
 ```
 
-| Array | Purpose | Leaderboard Display |
-|-------|---------|---------------------|
-| `submissions` | Current text submissions on the latest τ-bench version | Displayed normally |
-| `legacy_submissions` | Older submissions from previous benchmark versions | Dimmed with "v1" badge, hidden by default |
+### 3. Upload the trajectories
 
-> **Note for maintainers:** When a new benchmark version is released, move existing `submissions` entries to `legacy_submissions`.
+Trajectories are not committed to the repository; they are hosted on S3. Upload
+the `trajectories/` directory that `prepare` wrote to external storage (Google
+Drive, Hugging Face, institutional storage) and keep its structure:
 
-## Step 6: Submit Pull Request
+```
+trajectories/                         # text: one file per domain
+├── my-model_airline_default_gpt-4o_4trials.json
+└── ...
 
-1. Fork the [τ-bench repository](https://github.com/sierra-research/tau2-bench)
-2. Add your submission directory (with `submission.json` only) and update `manifest.json`
-3. Submit a pull request with:
-   - Clear description of your model and results
-   - A link to your trajectory files hosted externally (Google Drive, HuggingFace, etc.)
-   - Documentation of any framework modifications or task omissions
-   - Link to your model/paper if available
+trajectories/                         # voice: one directory per domain
+└── <experiment_name>/
+    ├── results.json
+    ├── simulations/
+    └── artifacts/                    # canonical audio only
+```
 
-> **Note:** After your PR is merged, submission metadata is automatically synced to S3 via a GitHub Actions workflow. Trajectory files are uploaded to S3 separately by a maintainer from the link you provide. The production website at [taubench.com](https://taubench.com) fetches all data from S3.
+A maintainer copies them to S3 after review.
 
-## JSON Schema Reference
+---
 
-Your `submission.json` must follow the schema defined in [`web/leaderboard/public/submissions/schema.json`](../web/leaderboard/public/submissions/schema.json).
+## Pull request
+
+1. Fork [sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench).
+2. Add your submission directory and, for voice-v1 and 1.x, the
+   `manifest.json` change.
+3. Open a pull request that includes:
+   - a short description of the model and results;
+   - the link to your uploaded trajectories (or, for 2.0, the matrix root);
+   - any framework changes or omitted tasks;
+   - a link to the model or paper, if available.
+
+After merge, submission metadata is synced to S3 by a GitHub Actions workflow,
+and a maintainer uploads the trajectories from your link. The site at
+[taubench.com](https://taubench.com) reads everything from S3.
+
+---
+
+## `submission.json` reference (voice-v1 and 1.x)
+
+This section applies to the leaderboard `submission.json` written for voice-v1
+and 1.x submissions. Your `submission.json` must follow the schema defined in [`web/leaderboard/public/submissions/schema.json`](../web/leaderboard/public/submissions/schema.json).
 
 ### Required Fields
 
@@ -255,6 +452,8 @@ Your `submission.json` must follow the schema defined in [`web/leaderboard/publi
 | `references` | array | — | Links to papers, documentation, repos |
 | `methodology` | object | — | Evaluation methodology details |
 | `voice_config` | object | — | Voice-specific configuration (required for voice) |
+| `interaction_metrics` | object | — | Voice interaction metrics computed from trajectories; see [Interaction Metrics](#interaction-metrics) |
+| `model_release` | object | — | Model release metadata (release date + announcement link); see [Model Release](#model-release) |
 
 ### Domain Results
 
@@ -266,6 +465,62 @@ Each domain in `results` accepts:
 ### References
 
 The optional `references` array links to papers, blog posts, documentation, or other resources. Supported `type` values: `paper`, `blog_post`, `documentation`, `model_card`, `github`, `huggingface`, `other`.
+
+### Model Release
+
+The optional `model_release` object captures metadata about the **model itself** (independent of the evaluation), so the leaderboard can track model progress over time:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `release_date` | string (YYYY-MM-DD) | Date the model was first made publicly available |
+| `announcement_url` | string | URL to the release announcement (blog post, paper, model card, release notes, etc.) |
+| `announcement_title` | string | Title of the announcement (used as link text in the UI) |
+
+`release_date` is distinct from the top-level `submission_date` (which is when the evaluation was submitted) and from `methodology.evaluation_date` (which is when the evaluation was run).
+
+If `announcement_url` is provided, `release_date` is required.
+
+Example:
+
+```json
+"model_release": {
+  "release_date": "2025-08-05",
+  "announcement_url": "https://www.anthropic.com/news/claude-opus-4-1",
+  "announcement_title": "Claude Opus 4.1"
+}
+```
+
+### Voice Config Fields
+
+Required when `modality` is `"voice"`:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `provider` | Yes | Audio-native provider (e.g. `"openai"`, `"gemini"`, `"xai"`) |
+| `model` | Yes | Model identifier (e.g. `"gpt-realtime-1.5"`) |
+| `tick_duration_seconds` | No | Duration of each simulation tick in seconds |
+| `max_steps_seconds` | No | Call limit recorded in the run, in simulated seconds (2400 for a 2.0 voice-v1 run; the example below is from an older run) |
+| `user_tts_provider` | No | User simulator TTS provider/model (e.g. `"elevenlabs/eleven_v3"`) |
+
+### Interaction Metrics
+
+Voice submissions carry an `interaction_metrics` block with the τ-voice
+interaction-quality panel (response/yield latency, response/yield rate, agent
+interruption rate, and selectivity for backchannels, vocal tics, and
+non-directed speech), computed offline from the tick-level trajectories. It is
+generated automatically by `tau2 submit prepare` for voice submissions and
+**recomputed by maintainers from the submitted trajectories during review** —
+submitter-provided values are always replaced.
+
+The block contains a `version` stamp, the detection-window `config`,
+per-domain panels under `domains`, and the cross-domain average under
+`overall`; every rate is accompanied by its event counts. See
+[Interaction Metrics documentation](interaction-metrics.md) for full metric
+definitions, and compute it yourself with:
+
+```bash
+tau2 submit interaction-metrics <experiment-dirs> --output interaction_metrics.json
+```
 
 ## Verification System
 
@@ -299,6 +554,8 @@ Include a `verification` section in the `methodology` object:
 - `omitted_questions` (boolean or null): `true` if tasks were omitted, `false` if all tasks evaluated, `null` if unknown
 - `details` (string, optional): Additional context about the evaluation methodology
 
+---
+
 ## Examples
 
 ### Standard Text Submission
@@ -309,6 +566,11 @@ Include a `verification` section in the `methodology` object:
   "model_organization": "My Company",
   "submitting_organization": "My Company",
   "submission_date": "2025-01-15",
+  "model_release": {
+    "release_date": "2025-01-10",
+    "announcement_url": "https://mycompany.example.com/blog/my-model-v1",
+    "announcement_title": "Introducing My-Model-v1.0"
+  },
   "contact_info": {
     "email": "contact@mycompany.com",
     "name": "Research Team"
@@ -325,7 +587,7 @@ Include a `verification` section in the `methodology` object:
     "retail": { "pass_1": 75.2, "pass_2": 68.1, "pass_3": 62.3, "pass_4": 57.8, "cost": 0.15 },
     "airline": { "pass_1": 65.4, "pass_2": 60.1, "pass_3": 56.2, "pass_4": 53.0, "cost": 0.12 },
     "telecom": { "pass_1": 58.9, "pass_2": 52.1, "pass_3": 47.6, "pass_4": 43.2, "cost": 0.18 },
-    "banking_knowledge": { "pass_1": 22.5, "pass_2": 17.3, "pass_3": 13.1, "pass_4": 10.2, "cost": 1.05, "retrieval_config": "terminal_use" }
+    "banking_knowledge": { "pass_1": 22.5, "pass_2": 17.3, "pass_3": 13.1, "pass_4": 10.2, "cost": 1.05, "retrieval_config": "alltools" }
   },
   "methodology": {
     "evaluation_date": "2025-01-10",
@@ -377,84 +639,9 @@ Include a `verification` section in the `methodology` object:
 
 See `web/leaderboard/public/submissions/A_EXAMPLE_new-model_example-org_2025-01-15/` for a complete example.
 
----
+### Voice Submission
 
-## Voice Submissions (τ-voice)
-
-Voice submissions evaluate audio-native models using full-duplex (simultaneous) communication. The voice evaluation stack is fundamentally different from text and requires significantly more infrastructure, so **voice submissions are handled on a case-by-case basis**.
-
-### Why Voice Is Different
-
-The voice user simulator is a complex multi-component system — LLM, TTS (via ElevenLabs), transcription (via Deepgram), audio effects pipeline, and decision models — that requires specific API keys and infrastructure to run. It is versioned separately via `VOICE_USER_SIMULATOR_VERSION` in `src/tau2/config.py`, with each version anchored to a git tag (`voice-user-sim-<version>`) for reproducibility.
-
-Because of this complexity, we recommend that you **open a PR and contact us** so we can coordinate running the evaluation.
-
-### Existing Provider (Adapter Already Integrated)
-
-OpenAI, Gemini, and xAI already have audio-native adapters in `src/tau2/voice/audio_native/`. If you want results for one of these providers:
-
-1. Open a PR with your `submission.json` and contact us — we can run the evaluation
-2. If you ran the evaluation yourself, include a link to your trajectory data in the PR description for verification
-
-The evaluation command (requires the full voice simulator stack):
-
-```bash
-tau2 run --domain retail --audio-native --audio-native-provider openai --audio-native-model gpt-realtime-1.5 --num-tasks 1 --verbose-logs
-```
-
-### New Provider (No Adapter Yet)
-
-If the provider you want to evaluate doesn't have an adapter:
-
-1. Implement an audio-native provider adapter integrating the provider's real-time WebSocket/audio API (see existing providers in `src/tau2/voice/audio_native/` for reference)
-2. Open a PR with the adapter implementation and documentation
-3. Contact us to coordinate running the evaluation
-
-### Voice Trajectory Data
-
-Voice trajectories contain audio data and tick-level simulation data, making them too large to include in the repository. Voice results use a directory-based storage format:
-
-```
-<experiment>/
-├── results.json         # Metadata and task definitions only
-├── simulations/         # Individual simulation data files
-│   ├── sim_0.json
-│   └── ...
-└── artifacts/           # Runtime artifacts
-    └── task_<id>/
-        └── sim_<uuid>/
-            └── audio/   # Conversation audio
-```
-
-When preparing a submission with `tau2 submit prepare`, monolithic JSON results are automatically converted to this directory format. The `prepare_submission` script also trims the output to include only canonical simulation audio (skipping debug logs, retried simulations, etc.).
-
-Share your trajectory data via an external link (Google Drive, HuggingFace, institutional storage, etc.) and include the link in your PR description. We will use these to verify your results.
-
-### Voice Submission Requirements
-
-- Set `"modality": "voice"`
-- Include a `voice_config` object (see fields below)
-- Report results from the **"regular" speech complexity** split only (not "control")
-- Set `trajectories_available` to `false`
-- Add your directory to the `voice_submissions` array in `manifest.json` (not `submissions`)
-- Include a link to your trajectory data in the PR description
-- Set `methodology.user_simulator` to the voice user simulator version used (e.g., `"v1.0"` — see git tag `voice-user-sim-v1.0`)
-
-> **Note:** Voice submissions typically only report Pass^1 scores since multi-trial evaluation with audio-native models is expensive. Higher Pass^k values may be `null`.
-
-### Voice Config Fields
-
-Required when `modality` is `"voice"`:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `provider` | Yes | Audio-native provider (e.g. `"openai"`, `"gemini"`, `"xai"`) |
-| `model` | Yes | Model identifier (e.g. `"gpt-realtime-1.5"`) |
-| `tick_duration_seconds` | No | Duration of each simulation tick in seconds |
-| `max_steps_seconds` | No | Maximum simulation duration in seconds |
-| `user_tts_provider` | No | User simulator TTS provider/model (e.g. `"elevenlabs/eleven_v3"`) |
-
-### Voice Submission Example
+Voice submissions set `modality` to `"voice"` and include a `voice_config` object. Set `methodology.user_simulator` to the voice user simulator version (e.g., `"v1.0"` — see git tag `voice-user-sim-v1.0`).
 
 ```json
 {
@@ -478,6 +665,24 @@ Required when `modality` is `"voice"`:
     "max_steps_seconds": 600,
     "user_tts_provider": "elevenlabs/eleven_v3"
   },
+  "interaction_metrics": {
+    "version": "1.0",
+    "config": { "tick_duration_sec": 0.2, "no_yield_window_sec": 2.0, "...": 0.0 },
+    "domains": {
+      "retail": {
+        "response_latency_mean": 1.44,
+        "yield_latency_mean": 0.62,
+        "response_rate": 0.998,
+        "yield_rate": 1.0,
+        "agent_interruption_rate": 0.2,
+        "selectivity_backchannel": 0.04,
+        "selectivity_vocal_tic": 0.06,
+        "selectivity_non_directed": 0.15,
+        "counts": { "n_simulations": 114, "response_total": 891, "yield_total": 566, "backchannel_total": 77, "vocal_tic_total": 83, "non_directed_total": 134, "agent_interrupts_count": 179 }
+      }
+    },
+    "overall": { "...": "per-metric mean across domains, counts summed" }
+  },
   "methodology": {
     "evaluation_date": "2026-03-01",
     "tau2_bench_version": "v2.0",
@@ -493,25 +698,21 @@ Required when `modality` is `"voice"`:
 
 See `web/leaderboard/public/submissions/A_EXAMPLE_voice-model_example-org_2026-03-11/` for a complete example.
 
-### Voice Manifest
-
-Voice submissions go in the `voice_submissions` array in `manifest.json` (separate from text):
-
-```json
-{
-  "submissions": [ ... ],
-  "voice_submissions": [
-    "my-voice-model_myorg_2026-03-01"
-  ],
-  "legacy_submissions": [ ... ]
-}
-```
-
 ---
 
 ## For Maintainers: Review Checklist
 
-### Text Submissions
+### 2.0 packages (text-v1, voice-v2)
+
+- [ ] PR links the complete uploaded matrix root (`benchmark-frame.json` and every cell)
+- [ ] Package directory name equals `{model_name}_{model_organization}_{submission_date}`; `manifest.json` lists it in `voice_v2_submissions`
+- [ ] `benchmark-metadata.json` has a contact email; `submission_type` is right (if custom: `notes` and `references` explain the change)
+- [ ] `review_submission.py <package> <downloaded-root>` passes (it runs `tau2 submit validate`); with `--upload` it copies the matrix to `trajectories/<language>/<domain>/` and sets `trajectories`
+- [ ] voice-v2: `benchmark-diagnostics.json` present and made with the production judge catalog
+- [ ] Spot-check: re-judge a sample of uploaded calls and compare unit outcomes with the matching fingerprints
+- [ ] No duplicate submissions
+
+### Text Submissions (1.x)
 
 - [ ] `submission.json` follows the [schema](../web/leaderboard/public/submissions/schema.json)
 - [ ] Directory name follows convention (`{model_name}_{model_organization}_{date}`)
@@ -529,7 +730,7 @@ Voice submissions go in the `voice_submissions` array in `manifest.json` (separa
 - [ ] PR includes link to externally hosted trajectory files
 - [ ] **After merge:** download trajectories and upload to S3: `aws s3 cp <local-trajectories>/ s3://sierra-tau-bench-public/submissions/<submission-dir>/trajectories/ --recursive --profile tau-bench-ci`
 
-### Voice Submissions
+### Voice Submissions (voice-v1, 1.x)
 
 - [ ] `submission.json` follows the [schema](../web/leaderboard/public/submissions/schema.json)
 - [ ] `modality` is `"voice"`, `trajectories_available` is `false`
@@ -539,6 +740,7 @@ Voice submissions go in the `voice_submissions` array in `manifest.json` (separa
 - [ ] PR description includes link to externally hosted trajectory data
 - [ ] **New provider:** PR includes audio-native adapter implementation and documentation
 - [ ] Results use "regular" speech complexity only
+- [ ] `interaction_metrics` recomputed from the submitted trajectories (done automatically by `review_submission.py`; submitter-provided values must not be trusted)
 - [ ] No duplicate submissions
 
 ## Questions?

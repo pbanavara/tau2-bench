@@ -17,7 +17,6 @@ Requires:
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -71,7 +70,9 @@ def main():
 
     # Load tasks
     tasks = get_tasks(task_set_name="prana", task_split_name=args.split)
-    print(f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}")
+    print(
+        f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}"
+    )
 
     # Output path
     output_path = args.output or (
@@ -86,12 +87,12 @@ def main():
         tasks=tasks,
         agent="medgemma_agent",
         user="user_simulator",
-        llm_agent=None,          # MedGemmaAgent uses env vars, not llm_agent string
+        llm_agent=None,  # MedGemmaAgent uses env vars, not llm_agent string
         llm_user="gpt-4o",
         llm_args_agent={},
         llm_args_user={"temperature": 0.7},
         num_trials=args.num_trials,
-        max_concurrency=1,       # Sequential to avoid Vertex AI rate limits
+        max_concurrency=1,  # Sequential to avoid Vertex AI rate limits
         save_to=str(output_path),
     )
 
@@ -111,7 +112,7 @@ def main():
 
     n = len(results.simulations)
     print("-" * 50)
-    print(f"{'TOTAL':<8} {total/n:.2f}  ({n} tasks)")
+    print(f"{'TOTAL':<8} {total / n:.2f}  ({n} tasks)")
     print(f"\nResults saved to: {output_path}")
 
 

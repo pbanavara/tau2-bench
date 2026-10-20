@@ -42,6 +42,7 @@ from tau2.config import (
     DEFAULT_AUDIO_NATIVE_TICK_TIMEOUT_BUFFER,
 )
 from tau2.data_model.message import ToolCall
+from tau2.data_model.usage import UsageRecord
 from tau2.environment.tool import Tool
 from tau2.voice.audio_native.adapter import DiscreteTimeAdapter
 from tau2.voice.audio_native.async_loop import BackgroundAsyncLoop
@@ -56,6 +57,7 @@ from tau2.voice.audio_native.nova.events import (
     NovaTextOutputEvent,
     NovaTimeoutEvent,
     NovaToolUseEvent,
+    NovaUsageEvent,
 )
 from tau2.voice.audio_native.nova.provider import (
     NOVA_BYTES_PER_SECOND,
@@ -96,6 +98,7 @@ class DiscreteTimeNovaAdapter(DiscreteTimeAdapter):
         tick_duration_ms: int,
         send_audio_instant: bool = True,
         model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
         provider: Optional[NovaSonicProvider] = None,
         voice: str = "tiffany",
     ):
@@ -106,9 +109,14 @@ class DiscreteTimeNovaAdapter(DiscreteTimeAdapter):
             send_audio_instant: If True, send audio in one call (discrete-time mode).
             model: Model to use. Defaults to None (provider default).
                 If provider is also provided, this is ignored.
+            reasoning_effort: Not supported by Nova. Must be None.
             provider: Optional provider instance. Created lazily if not provided.
             voice: Voice to use. Options: matthew, tiffany, amy. Default: tiffany.
         """
+        if reasoning_effort is not None:
+            raise ValueError(
+                f"Nova provider does not support reasoning_effort (got '{reasoning_effort}')"
+            )
         super().__init__(tick_duration_ms, send_audio_instant=send_audio_instant)
 
         self._chunk_size = int(NOVA_BYTES_PER_SECOND * self._voip_interval_ms / 1000)
@@ -536,6 +544,18 @@ class DiscreteTimeNovaAdapter(DiscreteTimeAdapter):
             )
             result.tool_calls.append(tool_call)
             logger.debug(f"Tool call detected: {event.tool_name}({event.tool_use_id})")
+
+        elif isinstance(event, NovaUsageEvent):
+            self.record_usage(
+                UsageRecord.from_nova_usage_event(
+                    model=self.model,
+                    completion_id=event.completion_id,
+                    total_input_tokens=event.total_input_tokens,
+                    total_output_tokens=event.total_output_tokens,
+                    details=event.details,
+                    raw=event.model_dump(exclude={"event_type"}, exclude_none=True),
+                )
+            )
 
         elif isinstance(event, NovaCompletionEndEvent):
             logger.debug(f"Completion done (stop_reason={event.stop_reason})")

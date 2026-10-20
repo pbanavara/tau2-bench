@@ -21,8 +21,8 @@ from typing import List, Optional
 from loguru import logger
 from pydantic import BaseModel
 
-from tau2.agent.base import (
-    LocalAgent,
+from tau2.agent.base_agent import (
+    HalfDuplexAgent,
     ValidAgentInputMessage,
     is_valid_agent_history_message,
 )
@@ -123,9 +123,9 @@ def _message_to_text(message) -> str:
     elif isinstance(message, AssistantMessage):
         if message.is_tool_call():
             calls = []
-            for tc in (message.tool_calls or []):
+            for tc in message.tool_calls or []:
                 calls.append(
-                    f"TOOL_CALL: {{\"name\": \"{tc.name}\", \"args\": {json.dumps(tc.arguments)}}}"
+                    f'TOOL_CALL: {{"name": "{tc.name}", "args": {json.dumps(tc.arguments)}}}'
                 )
             return "[AGENT]\n" + "\n".join(calls)
         else:
@@ -156,7 +156,7 @@ class MedGemmaAgentState(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
+class MedGemmaAgent(HalfDuplexAgent[MedGemmaAgentState]):
     """
     tau2 agent backed by MedGemma on a Vertex AI Model Garden endpoint.
 
@@ -174,7 +174,7 @@ class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
         self,
         tools: List[Tool],
         domain_policy: str,
-        llm: Optional[str] = None,       # unused, kept for registry compat
+        llm: Optional[str] = None,  # unused, kept for registry compat
         llm_args: Optional[dict] = None,  # unused, kept for registry compat
     ):
         super().__init__(tools=tools, domain_policy=domain_policy)
@@ -238,12 +238,14 @@ class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
         text = _strip_thinking(raw)
 
         if text.upper().startswith("TOOL_CALL:"):
-            json_str = text[len("TOOL_CALL:"):].strip()
+            json_str = text[len("TOOL_CALL:") :].strip()
             json_str = _strip_fence(json_str)
             try:
                 data = json.loads(json_str)
             except json.JSONDecodeError as e:
-                logger.error(f"MedGemma returned invalid tool call JSON: {json_str!r} — {e}")
+                logger.error(
+                    f"MedGemma returned invalid tool call JSON: {json_str!r} — {e}"
+                )
                 # Fall back to a text response so the conversation can continue
                 return AssistantMessage(
                     role="assistant",
@@ -262,7 +264,7 @@ class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
             return AssistantMessage(role="assistant", content=None, tool_calls=[tc])
 
         elif text.upper().startswith("RESPOND:"):
-            content = text[len("RESPOND:"):].strip()
+            content = text[len("RESPOND:") :].strip()
             return AssistantMessage(role="assistant", content=content, tool_calls=None)
 
         else:
@@ -274,7 +276,7 @@ class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
             return AssistantMessage(role="assistant", content=text, tool_calls=None)
 
     # ------------------------------------------------------------------
-    # LocalAgent interface
+    # HalfDuplexAgent interface
     # ------------------------------------------------------------------
 
     def get_init_state(
@@ -330,7 +332,7 @@ class MedGemmaAgent(LocalAgent[MedGemmaAgentState]):
 # ---------------------------------------------------------------------------
 
 
-class Gemma4Agent(LocalAgent[MedGemmaAgentState]):
+class Gemma4Agent(HalfDuplexAgent[MedGemmaAgentState]):
     """
     tau2 agent backed by Gemma 4 on a Vertex AI Model Garden endpoint.
 
@@ -399,8 +401,14 @@ class Gemma4Agent(LocalAgent[MedGemmaAgentState]):
         try:
             from langchain_core.messages import (
                 AIMessage as LCAIMessage,
+            )
+            from langchain_core.messages import (
                 HumanMessage,
+            )
+            from langchain_core.messages import (
                 SystemMessage as LCSystemMessage,
+            )
+            from langchain_core.messages import (
                 ToolMessage as LCToolMessage,
             )
         except ImportError as e:
@@ -412,26 +420,32 @@ class Gemma4Agent(LocalAgent[MedGemmaAgentState]):
                 lc_msgs.append(HumanMessage(content=msg.content or ""))
             elif isinstance(msg, AssistantMessage):
                 if msg.is_tool_call():
-                    lc_msgs.append(LCAIMessage(
-                        content=msg.content or "",
-                        tool_calls=[
-                            {"id": tc.id, "name": tc.name, "args": tc.arguments}
-                            for tc in (msg.tool_calls or [])
-                        ],
-                    ))
+                    lc_msgs.append(
+                        LCAIMessage(
+                            content=msg.content or "",
+                            tool_calls=[
+                                {"id": tc.id, "name": tc.name, "args": tc.arguments}
+                                for tc in (msg.tool_calls or [])
+                            ],
+                        )
+                    )
                 else:
                     lc_msgs.append(LCAIMessage(content=msg.content or ""))
             elif isinstance(msg, ToolMessage):
-                lc_msgs.append(LCToolMessage(
-                    content=msg.content or "",
-                    tool_call_id=msg.id,
-                ))
+                lc_msgs.append(
+                    LCToolMessage(
+                        content=msg.content or "",
+                        tool_call_id=msg.id,
+                    )
+                )
             elif isinstance(msg, MultiToolMessage):
                 for tm in msg.tool_messages:
-                    lc_msgs.append(LCToolMessage(
-                        content=tm.content or "",
-                        tool_call_id=tm.id,
-                    ))
+                    lc_msgs.append(
+                        LCToolMessage(
+                            content=tm.content or "",
+                            tool_call_id=tm.id,
+                        )
+                    )
         return lc_msgs
 
     def _from_lc_response(self, response) -> AssistantMessage:

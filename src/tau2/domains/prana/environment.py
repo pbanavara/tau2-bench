@@ -1,13 +1,16 @@
 """PRANA domain environment — τ-PRANA benchmark."""
 
-import json
 from pathlib import Path
 from typing import Optional
 
 from tau2.data_model.tasks import Task
 from tau2.domains.prana.data_model import PranaDB
 from tau2.domains.prana.tools import PranaTools
-from tau2.domains.prana.utils import PRANA_DB_PATH, PRANA_POLICY_PATH, PRANA_TASK_SET_PATH
+from tau2.domains.prana.utils import (
+    PRANA_DB_PATH,
+    PRANA_POLICY_PATH,
+    PRANA_TASK_SET_PATH,
+)
 from tau2.environment.environment import Environment
 from tau2.utils import load_file
 
@@ -42,5 +45,8 @@ def get_tasks(task_split_name: Optional[str] = "base") -> list[Task]:
 
 
 def get_tasks_split() -> dict[str, list[str]]:
-    split_file = Path(PRANA_TASK_SET_PATH).parent / f"split_{Path(PRANA_TASK_SET_PATH).stem}.json"
+    split_file = (
+        Path(PRANA_TASK_SET_PATH).parent
+        / f"split_{Path(PRANA_TASK_SET_PATH).stem}.json"
+    )
     return load_file(split_file)

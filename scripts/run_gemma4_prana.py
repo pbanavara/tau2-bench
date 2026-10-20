@@ -28,44 +28,63 @@ from tau2.run import get_tasks, run_tasks
 GEMMA4_MODEL_NAME = "google/gemma-4-31B-it"
 
 VALID_SPLITS = [
-    "adversarial", "time_phased", "anomaly", "temporal",
-    "easy", "medium", "hard", "very_hard", "base",
+    "adversarial",
+    "time_phased",
+    "anomaly",
+    "temporal",
+    "easy",
+    "medium",
+    "hard",
+    "very_hard",
+    "base",
 ]
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run PRANA benchmark against Gemma 4 (local mlx_vlm.server)")
+    parser = argparse.ArgumentParser(
+        description="Run PRANA benchmark against Gemma 4 (local mlx_vlm.server)"
+    )
     parser.add_argument(
-        "--split", default="adversarial", choices=VALID_SPLITS,
+        "--split",
+        default="adversarial",
+        choices=VALID_SPLITS,
         help="Task split to run (default: adversarial)",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Path to save results JSON",
     )
     parser.add_argument(
-        "--num-trials", type=int, default=1,
+        "--num-trials",
+        type=int,
+        default=1,
     )
     parser.add_argument(
-        "--model-name", default=GEMMA4_MODEL_NAME,
+        "--model-name",
+        default=GEMMA4_MODEL_NAME,
         help=f"Model name sent in request body (default: {GEMMA4_MODEL_NAME}). "
-             "Check what name mlx_vlm.server advertises via GET /v1/models.",
+        "Check what name mlx_vlm.server advertises via GET /v1/models.",
     )
     parser.add_argument(
-        "--server", default=None,
+        "--server",
+        default=None,
         help="Server base URL or IP:port (e.g. '<host>:8000' or 'http://host:port/v1'). "
-             "Overrides GEMMA4_BASE_URL env var. Default: http://localhost:8080/v1",
+        "Overrides GEMMA4_BASE_URL env var. Default: http://localhost:8080/v1",
     )
     parser.add_argument(
-        "--verbose", action="store_true",
+        "--verbose",
+        action="store_true",
         help="Enable DEBUG logging and LiteLLM verbose mode (shows every LLM request/response).",
     )
     parser.add_argument(
-        "--overwrite", action="store_true",
+        "--overwrite",
+        action="store_true",
         help="Delete existing results file and start fresh (skips the interactive prompt).",
     )
     parser.add_argument(
-        "--test", action="store_true",
+        "--test",
+        action="store_true",
         help="Run connectivity probes (plain text, then tool call) before the benchmark.",
     )
     return parser.parse_args()
@@ -95,10 +114,20 @@ def probe(base_url: str, model_str: str) -> bool:
         r = litellm.completion(
             model=model_str,
             messages=[{"role": "user", "content": "Call the ping tool."}],
-            tools=[{"type": "function", "function": {
-                "name": "ping", "description": "Test tool",
-                "parameters": {"type": "object", "properties": {}, "required": []},
-            }}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ping",
+                        "description": "Test tool",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "required": [],
+                        },
+                    },
+                }
+            ],
             tool_choice="auto",
             api_key="EMPTY",
             base_url=base_url,
@@ -141,7 +170,12 @@ def main():
     import socket
     import urllib.error
     import urllib.request
-    host, port = base_url.split("//")[1].split("/")[0].split(":") if ":" in base_url.split("//")[1].split("/")[0] else (base_url.split("//")[1].split("/")[0], "80")
+
+    host, port = (
+        base_url.split("//")[1].split("/")[0].split(":")
+        if ":" in base_url.split("//")[1].split("/")[0]
+        else (base_url.split("//")[1].split("/")[0], "80")
+    )
     print(f"\nChecking TCP connectivity to {host}:{port} ...", end=" ", flush=True)
     try:
         s = socket.create_connection((host, int(port)), timeout=5)
@@ -154,9 +188,12 @@ def main():
 
     print(f"Checking GET {base_url.rstrip('/')}/models ...", end=" ", flush=True)
     try:
-        req = urllib.request.Request(f"{base_url.rstrip('/')}/models", headers={"Authorization": "Bearer EMPTY"})
+        req = urllib.request.Request(
+            f"{base_url.rstrip('/')}/models", headers={"Authorization": "Bearer EMPTY"}
+        )
         with urllib.request.urlopen(req, timeout=10) as resp:
             import json as _json
+
             models = _json.loads(resp.read())
             ids = [m["id"] for m in models.get("data", [])]
             print(f"OK — models: {ids}")
@@ -167,16 +204,26 @@ def main():
     if args.test:
         ok = probe(base_url, model_str)
         if not ok:
-            print("\nProbe failed — check that mlx_vlm.server is running on the correct port.")
+            print(
+                "\nProbe failed — check that mlx_vlm.server is running on the correct port."
+            )
             sys.exit(1)
         print("\nProbe passed. Proceeding with benchmark...\n")
 
     tasks = get_tasks(task_set_name="prana", task_split_name=args.split)
-    print(f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}")
+    print(
+        f"Running {len(tasks)} tasks from split '{args.split}': {[t.id for t in tasks]}"
+    )
 
-    output_path = Path(args.output) if args.output else (
-        Path(__file__).parent.parent / "data" / "simulations"
-        / f"prana_gemma4_{args.split}.json"
+    output_path = (
+        Path(args.output)
+        if args.output
+        else (
+            Path(__file__).parent.parent
+            / "data"
+            / "simulations"
+            / f"prana_gemma4_{args.split}.json"
+        )
     )
 
     if args.overwrite and output_path.exists():
@@ -184,6 +231,7 @@ def main():
         print(f"Deleted existing results: {output_path}")
 
     import litellm
+
     litellm.set_verbose = args.verbose
 
     results = run_tasks(
@@ -227,7 +275,9 @@ def main():
 
     print("-" * 70)
     if n_scored:
-        print(f"{'TOTAL':<8} {total/n_scored:.2f}  ({n_scored} scored, {len(results.simulations)-n_scored} errors)")
+        print(
+            f"{'TOTAL':<8} {total / n_scored:.2f}  ({n_scored} scored, {len(results.simulations) - n_scored} errors)"
+        )
     print(f"\nResults saved to: {output_path}")
 
 

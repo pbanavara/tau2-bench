@@ -22,6 +22,18 @@ Example:
         web/leaderboard/public/submissions/my-model_org_2026-01-01 \\
         /tmp/downloaded-trajectories/ \\
         --verify-only --aws-profile tau-bench-ci
+
+    # 2.0 package (benchmark-submission.json): the source is the submitter's
+    # saved matrix root; cells upload to trajectories/<language>/<domain>/.
+    python -m tau2.scripts.leaderboard.review_submission \\
+        web/leaderboard/public/submissions/my-voice-model_org_2026-10-20 \\
+        /tmp/downloaded-matrix-root/ --upload
+
+    # The frozen 2026-10-02 release export, with its saved verdicts
+    python -m tau2.scripts.leaderboard.review_submission \\
+        web/leaderboard/public/submissions/<name> /path/to/release-export \\
+        --historical-voice-v2 --judges-root /path/to/verdicts/<provider> \\
+        [--judges-root ...]
 """
 
 import argparse
@@ -34,7 +46,22 @@ from urllib.request import urlopen
 from rich.console import Console
 
 from tau2.data_model.simulation import Results as TrajectoryResults
+from tau2.metrics.voice_interaction_metrics import NoVoiceTicksError
+from tau2.scripts.leaderboard.benchmark_package import (
+    PACKAGE_FILE_NAMES,
+    BenchmarkPackage,
+    evidence_cells,
+    is_package,
+    load_package,
+)
+from tau2.scripts.leaderboard.compute_interaction_metrics import (
+    build_interaction_metrics_block,
+    compute_metrics_for_loaded_results,
+    config_with_resolved_ticks,
+    resolve_experiment_config,
+)
 from tau2.scripts.leaderboard.prepare_submission import (
+    validate_benchmark_submission,
     validate_submission_metrics,
     validate_submission_traj_set,
 )
@@ -46,6 +73,9 @@ from tau2.scripts.leaderboard.submission import (
 from tau2.scripts.leaderboard.verify_trajectories import (
     VerificationMode,
     verify_single_file,
+)
+from tau2.scripts.leaderboard.voice_v2_publication import (
+    validate_historical_package,
 )
 from tau2.utils.io_utils import expand_paths
 
@@ -154,18 +184,58 @@ def _build_trajectory_map(
     return mapping
 
 
+def _compute_interaction_metrics(
+    results_list: list[TrajectoryResults],
+    console: Console,
+) -> dict | None:
+    """Recompute voice interaction metrics from the reviewed trajectories.
+
+    Maintainer-side recomputation is the anti-gaming guarantee: the values on
+    the leaderboard come from the submitted tick data, not from self-reported
+    numbers.
+    """
+    domain_metrics: dict[str, dict] = {}
+    resolved_configs = []
+    for results in results_list:
+        domain = results.info.environment_info.domain_name
+        if domain in domain_metrics:
+            raise ValueError(f"Domain {domain} appears in multiple trajectory files")
+        try:
+            domain_metrics[domain] = compute_metrics_for_loaded_results(results)
+            resolved_configs.append(resolve_experiment_config(results))
+            console.print(f"  [green]OK[/green] {domain}")
+        except NoVoiceTicksError:
+            console.print(
+                f"  [yellow]WARN[/yellow] {domain}: no tick data, "
+                "skipping interaction metrics for this domain"
+            )
+    if not domain_metrics:
+        return None
+    return build_interaction_metrics_block(
+        domain_metrics, config_with_resolved_ticks(None, resolved_configs)
+    )
+
+
 def _update_submission_json(
     submission_dir: Path,
     trajectory_map: dict[str, str],
     console: Console,
+    interaction_metrics: dict | None = None,
 ) -> None:
-    """Update submission.json with trajectory references."""
+    """Update submission.json with trajectory references and recomputed metrics."""
     submission_file = submission_dir / SUBMISSION_FILE_NAME
     with open(submission_file) as f:
         data = json.load(f)
 
     data["trajectories_available"] = True
     data["trajectory_files"] = trajectory_map
+    if interaction_metrics is not None:
+        if data.get("interaction_metrics") not in (None, interaction_metrics):
+            console.print(
+                "  [yellow]Replacing submitter-provided interaction_metrics "
+                "with recomputed values[/yellow]"
+            )
+        data["interaction_metrics"] = interaction_metrics
 
     with open(submission_file, "w") as f:
         json.dump(data, f, indent=2, default=str)
@@ -319,6 +389,132 @@ def _verify_upload(
         )
 
 
+def _package_uploads(
+    package: BenchmarkPackage,
+    source: Path,
+    judges_roots: list[Path],
+) -> list[tuple[Path, str]]:
+    """Local evidence → S3 key under ``submissions/<name>/``, language layer first.
+
+    Cells go to ``trajectories/<language>/<domain>/`` for both evidence layouts.
+    A matrix root's own files (frame, plan, execution record) go to
+    ``trajectories/``. For the historical export, its ``correction.json`` goes
+    to ``source_correction.json`` and saved verdicts to
+    ``judges/<agent_provider>/<language>/``, the layout of the 2026-10-09 Gemini
+    upload.
+    """
+    cells = [(cell.language, cell.domain) for cell in package.submission.frame.cells]
+    uploads = [
+        (local, f"{TRAJECTORY_FILES_DIR_NAME}/{key}/")
+        for key, local in evidence_cells(
+            source, package.metadata.evidence, cells
+        ).items()
+    ]
+    if package.metadata.evidence == "matrix":
+        uploads.extend(
+            (path, f"{TRAJECTORY_FILES_DIR_NAME}/{path.name}")
+            for path in sorted(source.glob("*.json"))
+        )
+    else:
+        if (source / "correction.json").is_file():
+            uploads.append((source / "correction.json", "source_correction.json"))
+        languages = dict.fromkeys(language for language, _ in cells)
+        provider = package.metadata.agent_provider
+        uploads.extend(
+            (root / language, f"judges/{provider}/{language}/")
+            for root in judges_roots
+            for language in languages
+            if (root / language).is_dir()
+        )
+    missing = [str(local) for local, _ in uploads if not local.exists()]
+    if missing:
+        raise ValueError("Missing evidence: " + ", ".join(missing))
+    return uploads
+
+
+def _review_package(
+    package_dir: Path, source: Path, args: argparse.Namespace, console: Console
+) -> None:
+    """Validate a 2.0 package against its evidence, then (optionally) upload."""
+    prefix = _s3_key_prefix(package_dir)
+    if args.verify_only:
+        package = load_package(package_dir)
+    elif args.historical_voice_v2:
+        console.print("\n[bold]Recomputing from the frozen release export...[/bold]")
+        package = validate_historical_package(package_dir, source, args.judges_root)
+    else:
+        console.print("\n[bold]Recomputing from the saved matrix...[/bold]")
+        package = validate_benchmark_submission(package_dir, source)
+    summary = package.submission.summary
+    console.print(
+        f"  {package.metadata.model_name} ({package.metadata.model_organization}): "
+        f"{summary.benchmark_version} pass@1 {100 * summary.score:.1f}% over "
+        f"{summary.scored_trials} calls"
+    )
+    if package.name != package_dir.name:
+        raise ValueError(f"Package directory must be named {package.name}")
+    uploads = _package_uploads(package, source, args.judges_root)
+    if args.verify_only:
+        _verify_package_upload(package, prefix, console)
+        return
+    console.print(f"\n[bold]Upload plan (s3://{S3_BUCKET}/{prefix}/):[/bold]")
+    for local, key in uploads:
+        console.print(f"  {local} -> {key}")
+    if not args.upload:
+        console.print(
+            "\n[yellow]Dry run complete. Re-run with --upload to push to S3.[/yellow]"
+        )
+        return
+    failed = False
+    for local, key in uploads:
+        command = "sync" if local.is_dir() else "cp"
+        failed |= not _run_aws(
+            ["s3", command, str(local), f"s3://{S3_BUCKET}/{prefix}/{key}"],
+            args.aws_profile,
+            console,
+        )
+    if failed:
+        raise SystemExit("Upload failed; benchmark-metadata.json was not updated")
+    package.metadata.trajectories = f"s3://{S3_BUCKET}/{prefix}"
+    package.write(package_dir)
+    for name in PACKAGE_FILE_NAMES:
+        if (package_dir / name).is_file():
+            _run_aws(
+                [
+                    "s3",
+                    "cp",
+                    str(package_dir / name),
+                    f"s3://{S3_BUCKET}/{prefix}/{name}",
+                ],
+                args.aws_profile,
+                console,
+            )
+    console.print(f"  Set trajectories to {package.metadata.trajectories}")
+    _verify_package_upload(package, prefix, console)
+
+
+def _verify_package_upload(
+    package: BenchmarkPackage, prefix: str, console: Console
+) -> None:
+    """Every cell's results.json is publicly readable at the language layer."""
+    console.print("\n[bold]Verifying S3 upload...[/bold]")
+    base = f"https://{S3_BUCKET}.s3.us-west-2.amazonaws.com/{prefix}"
+    missing = []
+    for cell in package.submission.frame.cells:
+        url = (
+            f"{base}/{TRAJECTORY_FILES_DIR_NAME}/{cell.language}/{cell.domain}/"
+            "results.json"
+        )
+        try:
+            with urlopen(url, timeout=30):
+                pass
+        except OSError:
+            missing.append(f"{cell.language}/{cell.domain}")
+    if missing:
+        raise SystemExit("Not publicly readable: " + ", ".join(missing))
+    console.print(f"  All {len(package.submission.frame.cells)} cells are readable")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Review and upload a leaderboard submission (maintainer tool).",
@@ -348,6 +544,18 @@ def main():
         action="store_true",
         help="Only verify an existing S3 upload (skip validation and upload)",
     )
+    parser.add_argument(
+        "--historical-voice-v2",
+        action="store_true",
+        help="2.0 package citing the frozen 2026-10-02 release export",
+    )
+    parser.add_argument(
+        "--judges-root",
+        type=Path,
+        action="append",
+        default=[],
+        help="With --historical-voice-v2: saved verdicts (<language>/<id>.json)",
+    )
     args = parser.parse_args()
 
     console = Console()
@@ -359,6 +567,12 @@ def main():
     )
     console.print(f"  Submission dir: {submission_dir}")
     console.print(f"  Trajectory source: {source}")
+
+    if is_package(submission_dir):
+        _review_package(submission_dir, source, args, console)
+        return
+    if args.historical_voice_v2 or args.judges_root:
+        raise ValueError("--historical-voice-v2 applies only to 2.0 packages")
 
     # Step 1: Load submission.json
     console.print("\n[bold]Step 1: Loading submission.json...[/bold]")
@@ -399,9 +613,19 @@ def main():
     for domain, name in trajectory_map.items():
         console.print(f"  {domain} -> {name}")
 
+    # Recompute interaction metrics from the reviewed trajectories (voice only)
+    interaction_metrics = None
+    if is_voice:
+        console.print(
+            "\n[bold]Step 5b: Recomputing voice interaction metrics...[/bold]"
+        )
+        interaction_metrics = _compute_interaction_metrics(results, console)
+
     # Update submission.json
     console.print("\n[bold]Step 6: Updating submission.json...[/bold]")
-    _update_submission_json(submission_dir, trajectory_map, console)
+    _update_submission_json(
+        submission_dir, trajectory_map, console, interaction_metrics
+    )
 
     if args.upload:
         # Upload
