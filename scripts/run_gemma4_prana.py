@@ -53,7 +53,7 @@ def parse_args():
     )
     parser.add_argument(
         "--server", default=None,
-        help="Server base URL or IP:port (e.g. '195.242.10.142:8000' or 'http://host:port/v1'). "
+        help="Server base URL or IP:port (e.g. '<host>:8000' or 'http://host:port/v1'). "
              "Overrides GEMMA4_BASE_URL env var. Default: http://localhost:8080/v1",
     )
     parser.add_argument(
@@ -129,7 +129,7 @@ def main():
             server = f"{server}/v1"
         base_url = server
     else:
-        base_url = os.environ.get("GEMMA4_BASE_URL", "http://195.242.10.142:8000/v1")
+        base_url = os.environ.get("GEMMA4_BASE_URL", "http://localhost:8080/v1")
     model_str = f"openai/{args.model_name}"
 
     chat_url = f"{base_url.rstrip('/')}/chat/completions"
@@ -138,7 +138,9 @@ def main():
     print(f"Model:            {model_str}")
 
     # Quick TCP + HTTP reachability check before handing off to LiteLLM
-    import socket, urllib.request, urllib.error
+    import socket
+    import urllib.error
+    import urllib.request
     host, port = base_url.split("//")[1].split("/")[0].split(":") if ":" in base_url.split("//")[1].split("/")[0] else (base_url.split("//")[1].split("/")[0], "80")
     print(f"\nChecking TCP connectivity to {host}:{port} ...", end=" ", flush=True)
     try:

@@ -105,7 +105,7 @@ Authority-based social engineering is a clear failure mode for gpt-5.4 on this b
 
 ### Adversarial — Gemma 4 31B agent (vLLM, OpenAI-compatible) / gpt-4o user
 
-Run: `2026-04-03` · Tasks 28–32 · Model: `google/gemma-4-31B-it` via vLLM at `http://195.242.10.142:8000/v1`
+Run: `2026-04-03` · Tasks 28–32 · Model: `google/gemma-4-31B-it` via a self-hosted vLLM endpoint
 
 | Task | Description | User Tactic | Expected | Reward | DB | ACTION | COMMUNICATE |
 |------|-------------|------------|----------|--------|----|--------|-------------|
