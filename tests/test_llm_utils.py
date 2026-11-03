@@ -134,3 +134,61 @@ def test_gpt_5_5_xhigh_uses_responses_api_and_preserves_system_turns(
         {"type": "text", "text": "The agent is silent."}
     ]
     assert captured["tools"] == [tool.openai_schema]
+
+
+def test_gemma_4_alias_maps_to_openrouter(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(
+                        role="assistant", content="Done", tool_calls=None
+                    ),
+                )
+            ],
+            to_dict=lambda: {},
+        )
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm_utils, "completion", fake_completion)
+    monkeypatch.setattr(llm_utils, "get_response_cost", lambda response: 0.0)
+    monkeypatch.setattr(
+        llm_utils,
+        "get_response_usage",
+        lambda response: {"prompt_tokens": 1, "completion_tokens": 1},
+    )
+    monkeypatch.setattr(llm_utils, "_write_llm_log", lambda *args, **kwargs: None)
+
+    response = generate(
+        "gemma-4-31b",
+        [UserMessage(role="user", content="Hello")],
+    )
+
+    assert response.content == "Done"
+    assert captured["model"] == "openrouter/google/gemma-4-31b-it"
+
+
+def test_get_response_cost_handles_unknown_plans_gracefully(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    response = SimpleNamespace(
+        model="google/gemma-4-31b-it",
+        usage=SimpleNamespace(
+            completion_tokens=10,
+            prompt_tokens=20,
+            prompt_tokens_details=None,
+        ),
+        get=lambda key, default=None: None,
+    )
+
+    def fake_completion_cost(*args, **kwargs):
+        raise Exception(
+            "This model isn't mapped yet. model=google/gemma-4-31b-it, custom_llm_provider=openrouter"
+        )
+
+    monkeypatch.setattr(llm_utils, "completion_cost", fake_completion_cost)
+    assert llm_utils.get_response_cost(response) == 0.0

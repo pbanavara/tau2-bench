@@ -153,6 +153,14 @@ def get_response_cost(response: ModelResponse) -> float:
     try:
         cost = completion_cost(completion_response=response)
     except Exception as e:
+        error_message = str(e)
+        if "This model isn't mapped yet" in error_message:
+            logger.warning(
+                "Model pricing is not mapped in LiteLLM for %s; treating as zero-cost. "
+                "This does not affect model execution.",
+                response.model,
+            )
+            return 0.0
         logger.error(e)
         return 0.0
     return cost
@@ -451,6 +459,18 @@ def _openai_responses_bridge_model(model: str) -> str:
     return model  # non-OpenAI provider — leave as-is
 
 
+def _normalize_model_name(model: str) -> str:
+    """Resolve shorthand model IDs to provider-qualified names for supported routes."""
+    if "/" in model:
+        return model
+
+    if model.startswith("gemma-4-"):
+        base = model[:-3] if model.endswith("-it") else model
+        return f"openrouter/google/{base}-it"
+
+    return model
+
+
 # Params the bridge drops because its failed capability lookup reports them
 # unsupported, although the Responses API accepts them.
 _RESPONSES_BRIDGE_PARAMS = ("tool_choice",)
@@ -608,6 +628,8 @@ def _generate_once(
 
     Returns: A tuple containing the message and the cost.
     """
+    normalized_model = _normalize_model_name(model)
+
     validate_message_history(messages)
     if kwargs.get("num_retries") is None:
         kwargs["num_retries"] = DEFAULT_MAX_RETRIES
@@ -616,10 +638,10 @@ def _generate_once(
     # Pass it through the Responses API body so the requested effort reaches
     # OpenAI, including user-simulator turns that use function tools.
     if (
-        model.split("/")[-1].startswith("gpt-5.5")
+        normalized_model.split("/")[-1].startswith("gpt-5.5")
         and kwargs.get("reasoning_effort") == "xhigh"
     ):
-        if "/" not in model or model.startswith("openai/"):
+        if "/" not in normalized_model or normalized_model.startswith("openai/"):
             kwargs = dict(kwargs)
             kwargs.pop("reasoning_effort")
             extra_body = dict(kwargs.pop("extra_body", {}) or {})
@@ -629,17 +651,17 @@ def _generate_once(
             kwargs["extra_body"] = extra_body
 
     # Vertex AI Gemini 3 models require VERTEXAI_LOCATION="global"
-    if model.startswith("vertex_ai/gemini-3") and not os.environ.get(
+    if normalized_model.startswith("vertex_ai/gemini-3") and not os.environ.get(
         "VERTEXAI_LOCATION"
     ):
         os.environ["VERTEXAI_LOCATION"] = "global"
 
     api_model = (
-        _openai_responses_bridge_model(model)
-        if model.split("/")[-1].startswith("gpt-5")
-        else model
+        _openai_responses_bridge_model(normalized_model)
+        if normalized_model.split("/")[-1].startswith("gpt-5")
+        else normalized_model
     )
-    _apply_anthropic_adaptive_thinking(model, kwargs)
+    _apply_anthropic_adaptive_thinking(normalized_model, kwargs)
     litellm_messages = to_litellm_messages(messages)
     if api_model.startswith("openai/responses/"):
         litellm_messages = _keep_non_leading_system_messages_positional(
