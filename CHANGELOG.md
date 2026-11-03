@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- voice-v2 packages carry `benchmark-quality.json` (schema
+  `schema_benchmark_quality.json`): call-level Interaction
+  (`voice-v2-interaction-call-v1`) and Experience, shown as Generation quality
+  (`voice-v2-experience-call-v2`), for every scored call. Each record has the
+  five Interaction flags (nonresponse, interruption over 3 events, selectivity
+  over 3 errors, monologue, tool misuse) and the Experience utterance and issue
+  counts. Each cell sums its pass/fail/unscored counts. `tau2 submit prepare`
+  and the historical adapter write it from the saved ticks and judge verdicts
+  without model calls. `tau2 submit validate` recomputes it and rejects any
+  difference. Calls that cannot be decided are unscored, never failed. Banking
+  and entity packages carry none. The deterministic turn-taking measurements
+  are in `tau2.metrics.interaction_quality` and the rules in
+  `tau2.metrics.call_quality`. See [docs/glossary.md](docs/glossary.md).
+- The maintainer-only historical adapter (`tau2 submit prepare/validate
+  --historical-voice-v2`) also packages the frozen 2026-10-02 release export's
+  banking and entity (intake) calls: `--benchmark banking` builds a
+  `voice-v2-banking` package and `--benchmark entity` a `voice-v2-entity` one
+  (default: `voice`). Those calls predate their manifests, so the adapter
+  checks each recorded binding against the released cell and accepts only
+  three verified `runtime_rules_sha256` digests. Neither frame is judged, so
+  neither takes `--judges-root`. Validation reads the frame from the package.
+  See [docs/voice-v2-publication.md](docs/voice-v2-publication.md).
+- 2.0 package names: `voice-v2-banking` and `voice-v2-entity` packages are
+  named `{model_name}_{model_organization}_{submission_date}_banking` /
+  `_entity`. One agent's voice-v2, banking and entity packages share their
+  metadata so the leaderboard can group them, and without the suffix they would
+  collide. voice-v2 and text-v1 names are unchanged.
+
+### Changed
+- Generation quality (Experience) is `voice-v2-experience-call-v2`. Live
+  speech recorded without a transcript is a recording gap, as in the judge
+  diagnostics: those utterances are left out and the rest of the call is
+  scored. v1 left the whole call unscored. A speech-fidelity clip whose judge
+  reply still hits its output limit after retries (the judge runs at
+  temperature 0, so retrying repeats it) affects only its utterance: it counts
+  as an issue when naturalness flagged it and is otherwise left out. Other
+  judge unit errors still leave a call unscored. Only GPT Live packages
+  change: 133 of gpt-live-1's 146 unscored calls are now scored (69 pass, 64
+  fail); no published package has an output-limit clip.
+- `tau2 submit prepare` and `tau2 submit validate` no longer block on
+  speech-fidelity clips that hit the judge's output limit. Diagnostics report
+  them as `output_limit_units` (omitted when zero, so existing packages are
+  unchanged). A package may have at most 0.1% of its speech-fidelity clips
+  left out this way; above that, preparation fails and lists the calls for
+  maintainer review. Timeouts and invalid replies still block.
+- `tau2 submit prepare` and `tau2 submit validate` accept saved voice cells whose
+  callers used the submitter's own voices (`TAU2_VOICE_ID_*`), as the submission
+  guide asks. The saved persona is compared with the released one without its TTS
+  voice ID, as trajectory evaluation already does; any other difference in the
+  task, persona or language context is still rejected.
+- Speech fidelity v7 replaces v6 for every language. It keeps the v6 model,
+  prompt and rubric, constrains the judge's reply to the findings schema and
+  lowers its output cap from 32,768 to 8,192 tokens. A clip on which the judge
+  loops until its output limit therefore fails sooner and costs less, and
+  fewer clips fail. v7 is unvalidated, as v6 was. The new contract and catalog
+  revisions make saved verdicts stale, so `tau2 judges suite` judges them again.
+- `tau2 judges suite` asks again, in the same run, for judge units whose reply
+  was incomplete (the output limit) or invalid, up to `--unit-retries` times
+  (default 2). Each attempt goes through the judge's own resume, which keeps
+  every successful unit and the same contract, so a single stuck unit no
+  longer leaves its whole call unjudged until the suite is rerun. Input errors
+  are not retried.
+- The speech-fidelity judge reads a finding marked severity 0 as the rubric's
+  "no clear issue" (an empty findings list) instead of failing the reply.
+- 2.0 scoring excludes infrastructure-errored calls from the denominator
+  instead of blocking the cell. A cell is complete once every owed call is
+  scored or errored and at least one is scored; its score averages the scored
+  calls only, and a task whose calls all errored drops out of the cell mean.
+  Errored calls stay reported as `error_trials` and are no longer listed as
+  gaps by `tau2 submit prepare`. Missing and unscored calls, and cells whose
+  calls all errored, still block a submission.
+- Judge diagnostics treat missing Live transcripts as recording gaps, not
+  judge failures. A verdict whose only unit errors are missing-Live-input
+  errors counts as judged (blocked units stay out of pass fractions and are
+  reported as `input_error_units`); a call a measure cannot judge for that
+  reason is excluded and reported as `input_excluded_calls`. Other judge
+  errors still block, as does a measure whose applicable calls are all
+  excluded. `VerdictFingerprint` gains `input_error_units`, so voice-v2
+  packages prepared before this change must be re-prepared.
+
 ## [2.0.0] - 2026-10-19
 
 > **⚠️ Scoring change — scores are not comparable with 1.x.** Communication checks,
@@ -62,7 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`voice-v2-banking` and `voice-v2-entity` packages under
   `voice_v2_domain_submissions`). Evidence is uploaded to
   `s3://sierra-tau-bench-public/submissions/<name>/trajectories/<language>/<domain>/`.
-- `intake` domain (τ-entity): exact entity capture on outbound calls, 200
+- `intake` domain (τ-Entity): exact entity capture on outbound calls, 200
   tasks, agent-directed (voice) by default with a `scaffolded` ablation that
   also runs in text. See `docs/elicitation.md`.
 - Multilingual text and voice runs: `--language` selects a language pack

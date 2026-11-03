@@ -35,7 +35,11 @@ from tau2.data_model.simulation import (
     TextRunConfig,
     VoiceRunConfig,
 )
-from tau2.runner.presets import binding_revision, load_cell_language
+from tau2.runner.presets import (
+    binding_revision,
+    load_cell_language,
+    uses_canonical_tasks,
+)
 
 
 class IncompleteSubmissionError(ValueError):
@@ -43,15 +47,26 @@ class IncompleteSubmissionError(ValueError):
 
 
 def describe_reward_gaps(summary: BenchmarkSummary) -> list[str]:
-    """Plain-text reward coverage gaps: an overall count, then one line per cell."""
-    lacking = summary.expected_trials - summary.scored_trials
-    if not lacking:
+    """Plain-text reward coverage gaps: an overall count, then one line per cell.
+
+    Infrastructure-errored calls are not gaps: they are excluded from the score
+    and only mentioned, unless a cell has no scored call at all.
+    """
+    if summary.complete:
         return []
-    lines = [
-        f"Rewards: {lacking}/{summary.expected_trials} calls lack a scored reward "
-        f"({summary.missing_trials} missing, {summary.error_trials} errored, "
-        f"{summary.unscored_trials} unscored)."
-    ]
+    unsettled = summary.missing_trials + summary.unscored_trials
+    lines = []
+    if unsettled:
+        lines.append(
+            f"Rewards: {unsettled}/{summary.expected_trials} calls lack a scored "
+            f"reward ({summary.missing_trials} missing, "
+            f"{summary.unscored_trials} unscored)."
+        )
+    if summary.error_trials:
+        lines.append(
+            f"Rewards: {summary.error_trials} infrastructure-errored calls are "
+            "excluded from the score, not counted as gaps."
+        )
     for cell in summary.cells:
         if cell.complete:
             continue
@@ -59,11 +74,14 @@ def describe_reward_gaps(summary: BenchmarkSummary) -> list[str]:
             f"{count} {label}"
             for count, label in (
                 (cell.missing_trials, "missing"),
-                (cell.error_trials, "errored"),
                 (cell.unscored_trials, "unscored"),
             )
             if count
         ]
+        if not cell.scored_trials:
+            parts.append("no scored call")
+        if cell.error_trials:
+            parts.append(f"{cell.error_trials} errored (excluded)")
         lines.append(f"  {cell.language}-{cell.domain}: " + ", ".join(parts))
     return lines
 
@@ -123,7 +141,12 @@ def _recorded_config(info: Info) -> RunConfig:
 
 
 def _authoritative_language(
-    language: str, domain: str, expected_binding: str, mode: str
+    language: str,
+    domain: str,
+    expected_binding: str,
+    mode: str,
+    *,
+    canonical_tasks: bool = False,
 ):
     """Require exact published source assets; saved metadata cannot authenticate itself.
 
@@ -132,7 +155,9 @@ def _authoritative_language(
     there is no fallback to a task or persona supplied inside the saved result.
     """
     try:
-        loaded = load_cell_language(language, domain, mode)
+        loaded = load_cell_language(
+            language, domain, mode, canonical_tasks=canonical_tasks
+        )
     except (OSError, ValueError) as exc:
         raise ValueError(
             f"Cannot load authoritative benchmark artifacts for {language}/{domain}; "
@@ -248,7 +273,11 @@ def read_task_trials(path: Path, frame: BenchmarkFrame) -> list[TaskTrial]:
             + ", ".join(changed)
         )
     authoritative = _authoritative_language(
-        record.language, record.domain, cell.binding_revision, frame.mode
+        record.language,
+        record.domain,
+        cell.binding_revision,
+        frame.mode,
+        canonical_tasks=uses_canonical_tasks(frame),
     )
     if info.language_artifacts != authoritative.artifact_pins:
         raise ValueError(
@@ -278,7 +307,7 @@ def read_task_trials(path: Path, frame: BenchmarkFrame) -> list[TaskTrial]:
         raise ValueError(
             "Saved task selection differs from authoritative benchmark artifacts"
         )
-    from tau2.multilingual.runtime import resolve_task
+    from tau2.multilingual.runtime import resolve_task, without_delivery_details
 
     for task_id, context in contexts.items():
         source_task = source_tasks[task_id]
@@ -287,7 +316,11 @@ def read_task_trials(path: Path, frame: BenchmarkFrame) -> list[TaskTrial]:
                 "Saved task content differs from authoritative frozen task"
             )
         expected_context = resolve_task(authoritative, source_task, config.seed or 0)
-        if context != expected_context:
+        # Submitters use their own caller voices (TAU2_VOICE_ID_*), which change
+        # delivery, not the graded task or persona.
+        if without_delivery_details(context) != without_delivery_details(
+            expected_context
+        ):
             raise ValueError(
                 "Saved language/task/persona context differs from authoritative artifacts"
             )
@@ -432,9 +465,14 @@ def _summarize(
 ) -> BenchmarkSummary:
     """Average trials within task, tasks within cell, and all cells equally.
 
-    Partial means are explicitly labeled and never substituted for an official
-    score. Repeated observations, unknown membership and incompatible conditions
-    fail rather than quietly changing the sample or its weights.
+    Infrastructure-errored trials are harness faults, not model failures: they
+    leave the denominator (a task whose trials all errored drops out of its cell
+    mean) and stay counted in ``error_trials``. A cell is complete once every
+    owed trial is scored or errored and at least one is scored; missing and
+    unscored trials still block it. Partial means are explicitly labeled and
+    never substituted for an official score. Repeated observations, unknown
+    membership and incompatible conditions fail rather than quietly changing the
+    sample or its weights.
     """
     conditions = {trial.condition_fingerprint for trial in trials}
     if len(conditions) > 1:
@@ -475,16 +513,16 @@ def _summarize(
         )
         owed = len(cell.canonical_task_ids) * len(frame.trials)
         scored = sum(trial.status == TrialStatus.SCORED for trial in observations)
-        complete = scored == owed
+        errored = sum(trial.status == TrialStatus.ERROR for trial in observations)
+        # An all-errored cell has no score to report, so it never counts.
+        complete = scored > 0 and scored + errored == owed
         summaries.append(
             CellSummary(
                 language=cell.language,
                 domain=cell.domain,
                 expected_trials=owed,
                 scored_trials=scored,
-                error_trials=sum(
-                    trial.status == TrialStatus.ERROR for trial in observations
-                ),
+                error_trials=errored,
                 unscored_trials=sum(
                     trial.status == TrialStatus.UNSCORED for trial in observations
                 ),

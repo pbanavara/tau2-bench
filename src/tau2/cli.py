@@ -46,6 +46,7 @@ from tau2.data_model.simulation import TextRunConfig, VoiceRunConfig
 from tau2.domains.banking_knowledge.retrieval import get_all_variant_names
 from tau2.run import get_options, run_domain
 from tau2.runner.work import parse_provider_limits
+from tau2.voice.audio_native.avartha_pipecat.config import AvarthaPipecatConfig
 
 
 def get_all_retrieval_config_names():
@@ -104,13 +105,13 @@ def add_run_args(parser):
         "--user-llm",
         type=str,
         default=None,
-        help=f"The LLM to use for the user. Default is {DEFAULT_LLM_USER}; τ-entity uses {DEFAULT_ELICITATION_LLM_USER}.",
+        help=f"The LLM to use for the user. Default is {DEFAULT_LLM_USER}; τ-Entity uses {DEFAULT_ELICITATION_LLM_USER}.",
     )
     parser.add_argument(
         "--user-llm-args",
         type=json.loads,
         default=None,
-        help=f"The arguments to pass to the LLM for the user. Default is '{{\"temperature\": {DEFAULT_LLM_TEMPERATURE_USER}}}'; the default τ-entity caller uses {json.dumps(DEFAULT_ELICITATION_LLM_ARGS_USER)}.",
+        help=f"The arguments to pass to the LLM for the user. Default is '{{\"temperature\": {DEFAULT_LLM_TEMPERATURE_USER}}}'; the default τ-Entity caller uses {json.dumps(DEFAULT_ELICITATION_LLM_ARGS_USER)}.",
     )
     parser.add_argument(
         "--task-set-name",
@@ -276,6 +277,8 @@ def add_run_args(parser):
             "xai",
             "nova",
             "qwen",
+            "avartha_pipecat",
+            "phonic",
             "livekit",
             "launa",
         ],
@@ -294,7 +297,19 @@ def add_run_args(parser):
         "--audio-native-model",
         type=str,
         default=None,
-        help="Audio native model to use. If not specified, uses the default model for the selected provider.",
+        help="Audio native model to use. If not specified, uses the default model for the selected provider. "
+        "For avartha_pipecat, it is only a label, since --avartha-base-url "
+        "selects the agent.",
+    )
+    parser.add_argument(
+        "--avartha-base-url",
+        default=None,
+        help=(
+            "URL of the hosted Avartha agent the avartha_pipecat provider calls, "
+            "https://<host>/inference/serverless/pipecat/v1/public/<agent_id>. "
+            "Required for that provider, which also needs the live extra and "
+            "AVARTHA_API_KEY."
+        ),
     )
     parser.add_argument(
         "--live-config",
@@ -307,7 +322,8 @@ def add_run_args(parser):
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Run user LLM/TTS generation without blocking audio ticks. "
-        "Defaults to enabled for openai_live and disabled for other providers. "
+        "Defaults to enabled for openai_live and avartha_pipecat and disabled for "
+        "other providers. "
         "Use --no-realtime-generation to disable.",
     )
     parser.add_argument(
@@ -327,7 +343,7 @@ def add_run_args(parser):
         "--max-steps-seconds",
         type=int,
         default=None,
-        help=f"Maximum conversation duration in seconds. Default is {DEFAULT_MAX_STEPS_SECONDS}; τ-entity uses {DEFAULT_ELICITATION_MAX_STEPS_SECONDS}.",
+        help=f"Maximum conversation duration in seconds. Default is {DEFAULT_MAX_STEPS_SECONDS}; τ-Entity uses {DEFAULT_ELICITATION_MAX_STEPS_SECONDS}.",
     )
     parser.add_argument(
         "--speech-complexity",
@@ -576,7 +592,7 @@ def run_intro():
     domain_table.add_row("mock", "Lightweight test domain for development")
     domain_table.add_row(
         "intake",
-        "τ-entity: agent-directed voice elicitation; optional scaffolded ablation",
+        "τ-Entity: agent-directed voice elicitation; optional scaffolded ablation",
     )
     console.print(domain_table)
     console.print()
@@ -609,7 +625,7 @@ def run_intro():
     cmd_table.add_row("tau2 submit validate", "Validate a submission directory")
     cmd_table.add_row("tau2 check-data", "Verify data directory is set up correctly")
     cmd_table.add_row(
-        "tau2 intake-tasks", "Enumerate, reproduce, and verify frozen τ-entity tasks"
+        "tau2 intake-tasks", "Enumerate, reproduce, and verify frozen τ-Entity tasks"
     )
     cmd_table.add_row("tau2 start", "Start background servers")
     cmd_table.add_row("tau2 intro", "Show this page")
@@ -726,6 +742,20 @@ def main():
                     args.audio_native_provider
                 ]
 
+            avartha_config = None
+            if args.audio_native_provider == "avartha_pipecat":
+                if not args.avartha_base_url:
+                    run_parser.error(
+                        "--avartha-base-url is required when "
+                        "--audio-native-provider avartha_pipecat"
+                    )
+                try:
+                    avartha_config = AvarthaPipecatConfig(
+                        base_url=args.avartha_base_url
+                    )
+                except ValueError as exc:
+                    run_parser.error(f"invalid Avartha configuration: {exc}")
+
             # Determine use_xml_prompt: defaults to False (plain text)
             use_xml_prompt = False
             if args.xml_prompt:
@@ -735,6 +765,7 @@ def main():
                 # Provider
                 provider=args.audio_native_provider,
                 model=audio_native_model,
+                avartha_config=avartha_config,
                 cascaded_request=(
                     CascadedConfigRequest(preset=args.cascaded_config)
                     if args.cascaded_config is not None
@@ -884,7 +915,7 @@ def main():
     from tau2.domains.intake.tasks.cli import add_intake_tasks_args
 
     add_intake_tasks_args(
-        subparsers.add_parser("intake-tasks", help="Generate and verify τ-entity tasks")
+        subparsers.add_parser("intake-tasks", help="Generate and verify τ-Entity tasks")
     )
 
     # Play command

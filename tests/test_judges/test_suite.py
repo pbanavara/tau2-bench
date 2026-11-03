@@ -520,6 +520,99 @@ def test_partial_results_report_coverage_and_resume_without_losing_successes(tmp
     assert report.complete and report.pass_units == 4 and report.error_units == 0
 
 
+def _errored_verdict(*errors):
+    verdict = passing_backend(None, None, None)
+    verdict.unit_errors = list(errors)
+    return verdict
+
+
+def test_failed_replies_are_asked_again_in_the_same_run(tmp_path):
+    """A judge that loops until its output limit on one unit usually succeeds
+    when asked again; without a retry that unit left its whole call unjudged
+    until someone re-ran the suite."""
+    from tau2.data_model.judges import UnitError
+
+    failed = UnitError(unit_id="bad", kind="response", error="output token limit")
+    replies = iter([_errored_verdict(failed), None])
+    asked = []
+
+    def resume(item, contract, measure, previous):
+        asked.append([error.unit_id for error in previous.unit_errors])
+        reply = next(replies)
+        if reply is not None:
+            return reply
+        return MeasureVerdict(
+            units=[
+                *previous.units,
+                previous.units[0].model_copy(update={"unit_id": "bad"}),
+            ]
+        )
+
+    path = tmp_path / "verdicts.json"
+    execute_suite(
+        inputs()[:1],
+        load_catalog(),
+        path,
+        only=[Measure.NATURALNESS],
+        backend=lambda *args: _errored_verdict(failed),
+        resume_backend=resume,
+        unit_retries=2,
+    )
+
+    [stored] = read_verdicts(path)
+    assert asked == [["bad"], ["bad"]]
+    assert stored.verdict.unit_errors == []
+    assert [u.unit_id for u in stored.verdict.units] == ["call", "bad"]
+    assert JudgeExecutionConfig().unit_retries == 2
+
+
+def test_input_errors_and_exhausted_retries_stay_recorded(tmp_path):
+    from tau2.data_model.judges import UnitError
+
+    missing = UnitError(unit_id="live", kind="input", error="No transcript")
+    failed = UnitError(unit_id="bad", kind="response", error="output token limit")
+    path = tmp_path / "verdicts.json"
+    execute_suite(
+        inputs()[:1],
+        load_catalog(),
+        path,
+        only=[Measure.NATURALNESS],
+        backend=lambda *args: _errored_verdict(missing),
+        resume_backend=lambda *args: pytest.fail("an input error was retried"),
+        unit_retries=2,
+    )
+    assert read_verdicts(path)[0].verdict.unit_errors == [missing]
+
+    attempts = []
+
+    def still_failing(item, contract, measure, previous):
+        attempts.append(1)
+        return previous
+
+    def lost_connection(*args):
+        raise RuntimeError("Lost connection")
+
+    for resume, expected in ((still_failing, 2), (lost_connection, 0)):
+        attempts.clear()
+        execute_suite(
+            inputs()[:1],
+            load_catalog(),
+            path,
+            only=[Measure.NATURALNESS],
+            force=True,
+            backend=lambda *args: _errored_verdict(failed),
+            resume_backend=resume,
+            unit_retries=2,
+        )
+        # The unit stays an error for a later suite run; the call's successful
+        # units are kept either way.
+        [stored] = read_verdicts(path)
+        assert len(attempts) == expected
+        assert stored.error is None
+        assert stored.verdict.unit_errors == [failed]
+        assert [u.unit_id for u in stored.verdict.units] == ["call"]
+
+
 def test_unjudged_unit_cannot_also_be_a_pass():
     from tau2.data_model.judges import UnitError
 
@@ -533,3 +626,203 @@ def test_unjudged_unit_cannot_also_be_a_pass():
         )
     with pytest.raises(ValueError, match="Empty"):
         MeasureVerdict(units=[])
+
+
+def _live_input_rows(tmp_path, backends):
+    """Store one naturalness verdict per input, using one backend per trial."""
+    path = tmp_path / "verdicts.json"
+    execute_suite(
+        inputs(),
+        load_catalog(),
+        path,
+        only=[Measure.NATURALNESS],
+        backend=lambda item, *rest: backends[item.trial](item, *rest),
+    )
+    stored = read_verdicts(path)
+    plan = plan_suite(inputs(), load_catalog(), stored, only=[Measure.NATURALNESS])
+    return plan, stored
+
+
+def _with_errors(*kinds):
+    from tau2.data_model.judges import UnitError
+
+    def backend(*args):
+        result = passing_backend(*args)
+        result.unit_errors = [
+            UnitError(unit_id=f"u{index}", kind=kind, error="No transcript")
+            for index, kind in enumerate(kinds)
+        ]
+        return result
+
+    return backend
+
+
+def _live_input_call_error(*_):
+    from tau2.judges.run_evidence import LIVE_INPUT_CALL_ERROR
+
+    raise ValueError(f"{LIVE_INPUT_CALL_ERROR}: segment 3 has no transcript")
+
+
+def test_missing_live_transcripts_are_excluded_not_blocking(tmp_path):
+    from tau2.judges.submission import CellDiagnostics, _cell_rows
+    from tau2.judges.summary import summarize_suite
+
+    plan, stored = _live_input_rows(
+        tmp_path, [_with_errors("input"), _live_input_call_error]
+    )
+    assert stored[1].error.startswith("ValueError: Call-level judgment")
+    report = summarize_suite(plan, stored)[0]
+    assert report.complete
+    assert (report.judged_calls, report.input_excluded_calls) == (1, 1)
+    assert report.error_calls == 0 and report.partial_calls == 1
+    assert report.error_units == report.input_error_units == 1
+    assert report.pass_units == 1 and report.observed_pass_fraction == 1
+    fingerprints, _ = _cell_rows(plan.items, stored)
+    cell = CellDiagnostics(
+        language="pt", domain="retail", summary=[report], verdicts=fingerprints
+    )
+    assert CellDiagnostics.model_validate_json(cell.model_dump_json()) == cell
+    forged = cell.model_dump()
+    forged["verdicts"][0]["input_error_units"] = 0
+    with pytest.raises(ValueError, match="does not match verdict fingerprints"):
+        CellDiagnostics.model_validate(forged)
+
+
+def test_other_judge_errors_still_block_beside_live_input(tmp_path):
+    from tau2.judges.summary import summarize_suite
+
+    plan, stored = _live_input_rows(
+        tmp_path, [_with_errors("input", "response"), _live_input_call_error]
+    )
+    report = summarize_suite(plan, stored)[0]
+    assert not report.complete
+    assert (report.judged_calls, report.error_calls) == (0, 1)
+    assert report.input_excluded_calls == 1 and report.input_error_units == 1
+
+    def api_failure(*_):
+        raise ValueError("RateLimitError: try again")
+
+    plan, stored = _live_input_rows(tmp_path / "api", [passing_backend, api_failure])
+    report = summarize_suite(plan, stored)[0]
+    assert not report.complete and report.error_calls == 1
+    assert report.input_excluded_calls == 0
+
+
+def test_measure_with_every_call_excluded_is_incomplete(tmp_path):
+    from tau2.data_model.judges import UnitError
+    from tau2.judges.summary import summarize_suite
+
+    def no_units(*_):
+        return MeasureVerdict(
+            units=[],
+            unit_errors=[UnitError(unit_id="1", kind="input", error="No transcript")],
+        )
+
+    plan, stored = _live_input_rows(tmp_path, [no_units, _live_input_call_error])
+    report = summarize_suite(plan, stored)[0]
+    assert report.input_excluded_calls == 2 and report.judged_calls == 0
+    assert not report.complete
+
+
+def _fidelity_rows(tmp_path, backends):
+    """Store one speech-fidelity verdict per input, using one backend per trial."""
+    path = tmp_path / "verdicts.json"
+    execute_suite(
+        inputs(),
+        load_catalog(),
+        path,
+        only=[Measure.SPEECH_FIDELITY],
+        backend=lambda item, *rest: backends[item.trial](item, *rest),
+    )
+    stored = read_verdicts(path)
+    plan = plan_suite(inputs(), load_catalog(), stored, only=[Measure.SPEECH_FIDELITY])
+    return plan, stored
+
+
+def _output_limit(units=True, finish_reason="length"):
+    from tau2.data_model.judges import UnitError
+
+    def backend(*args):
+        result = passing_backend(*args)
+        if not units:
+            result = MeasureVerdict.model_construct(units=[], unit_errors=[])
+        result.unit_errors = [
+            UnitError(
+                unit_id="921",
+                kind="response",
+                error="ValueError: Judge response reached its output token limit",
+                finish_reason=finish_reason,
+            )
+        ]
+        return result
+
+    return backend
+
+
+def test_fidelity_output_limit_is_left_out_not_blocking(tmp_path):
+    from tau2.judges.submission import CellDiagnostics, _cell_rows
+    from tau2.judges.summary import summarize_suite
+
+    plan, stored = _fidelity_rows(
+        tmp_path, [_output_limit(), _output_limit(units=False)]
+    )
+    report = summarize_suite(plan, stored)[0]
+    assert report.complete and report.error_calls == 0
+    assert (report.judged_calls, report.partial_calls) == (2, 1)
+    assert report.error_units == report.output_limit_units == 2
+    fingerprints, _ = _cell_rows(plan.items, stored)
+    assert [row.output_limit_units for row in fingerprints] == [1, 1]
+    cell = CellDiagnostics(
+        language="pt", domain="retail", summary=[report], verdicts=fingerprints
+    )
+    assert CellDiagnostics.model_validate_json(cell.model_dump_json()) == cell
+    forged = cell.model_dump()
+    forged["verdicts"][0]["output_limit_units"] = 0
+    with pytest.raises(ValueError, match="does not match verdict fingerprints"):
+        CellDiagnostics.model_validate(forged)
+    # Packages without such clips serialize exactly as before.
+    plan, stored = _fidelity_rows(tmp_path / "clean", [passing_backend] * 2)
+    clean = summarize_suite(plan, stored)[0]
+    assert "output_limit_units" not in clean.model_dump_json()
+    fingerprints, _ = _cell_rows(plan.items, stored)
+    assert "output_limit_units" not in fingerprints[0].model_dump_json()
+
+
+def test_other_fidelity_response_errors_still_block(tmp_path):
+    from tau2.judges.summary import summarize_suite
+
+    plan, stored = _fidelity_rows(
+        tmp_path, [_output_limit(finish_reason=None), passing_backend]
+    )
+    report = summarize_suite(plan, stored)[0]
+    assert not report.complete and report.error_calls == 1
+    assert report.output_limit_units == 0
+    # The same limit on another measure is still a judge error.
+    plan, stored = _live_input_rows(tmp_path / "nat", [_output_limit()] * 2)
+    report = summarize_suite(plan, stored)[0]
+    assert not report.complete and report.error_calls == 2
+
+
+def test_output_limit_clips_are_capped_per_package():
+    from types import SimpleNamespace
+
+    from tau2.judges.submission import output_limit_overage
+
+    def package(limited, judged):
+        row = SimpleNamespace(simulation_id="sim", trial=0, output_limit_units=limited)
+        summary = SimpleNamespace(
+            measure="speech_fidelity",
+            pass_units=judged - limited,
+            fail_units=0,
+            output_limit_units=limited,
+        )
+        cell = SimpleNamespace(
+            language="es", domain="airline", summary=[summary], verdicts=[row]
+        )
+        return SimpleNamespace(cells=[cell])
+
+    assert output_limit_overage(package(0, 900)) == []
+    assert output_limit_overage(package(2, 2000)) == []
+    lines = output_limit_overage(package(3, 2000))
+    assert "3 of 2000" in lines[0]
+    assert lines[1] == "  es-airline sim trial 0: 3 clip(s)"

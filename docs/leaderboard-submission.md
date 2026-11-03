@@ -7,8 +7,8 @@ benchmark generation:
 | You ran | Package | Leaderboard tab | Section |
 |---|---|---|---|
 | `text-v1` (2.0 text, 18 cells) | `benchmark-submission.json` | 2.0 | [2.0 benchmarks](#20-benchmarks-text-v1-voice-v2-banking-and-entity) |
-| `voice-v2` (2.0 voice, τ-i18n, 18 cells) | `benchmark-submission.json` + `benchmark-diagnostics.json` | 2.0 | [2.0 benchmarks](#20-benchmarks-text-v1-voice-v2-banking-and-entity) |
-| `voice-v2-banking` / `voice-v2-entity` (6 languages) | `benchmark-submission.json` | 2.0 (Banking, Intake) | [Banking and τ-entity](#banking-and-τ-entity-voice) |
+| `voice-v2` (2.0 voice, τ-i18n, 18 cells) | `benchmark-submission.json` + `benchmark-diagnostics.json` + `benchmark-quality.json` | 2.0 | [2.0 benchmarks](#20-benchmarks-text-v1-voice-v2-banking-and-entity) |
+| `voice-v2-banking` / `voice-v2-entity` (6 languages) | `benchmark-submission.json` | 2.0 (Banking, Intake) | [Banking and τ-Entity](#banking-and-τ-entity-voice) |
 | `voice-v1` (English voice, 3 domains) | `submission.json` | English voice | [voice-v1](#voice-v1-english-voice) |
 | 1.x text or voice (v1.0.1) | `submission.json` | 1.x | [1.x submissions](#1x-submissions) |
 
@@ -79,7 +79,7 @@ is optional; pass it only to assert which benchmark you expect. See
 
 ```bash
 # 1. Run the released voice benchmark. Repeat the same command (it resumes) to
-#    fill missing calls and retry infrastructure errors.
+#    fill missing calls; it also retries infrastructure errors.
 tau2 run --audio-native --audio-native-model <model> --save-to voice-run
 
 # 2. Judge every cell. Resumable: it judges only missing, stale and errored verdicts.
@@ -99,7 +99,9 @@ tau2 submit validate ./submissions/<name> --results data/simulations/voice-run
 `submitter.json` names the submission (see [Package metadata](#package-metadata)).
 `prepare` writes the package to `./submissions/<name>/`, where `<name>` is
 `{model_name}_{model_organization}_{submission_date}` in lowercase letters,
-numbers and hyphens.
+numbers and hyphens. voice-v2 and text-v1 names have no suffix. Banking and
+entity packages add `_banking` or `_entity`, so that one agent's three packages
+can share their metadata (see [Banking and τ-Entity](#banking-and-τ-entity-voice)).
 
 `prepare` refuses unless every cell's rewards are complete and every applicable
 judge measure in every cell has a usable saved verdict. It reads saved results
@@ -108,8 +110,9 @@ and a message like this:
 
 ```
 Error: Submission is incomplete for voice-v2 (data/simulations/voice-run).
-Rewards: 60/900 calls lack a scored reward (60 missing, 0 errored, 0 unscored).
-  pt-retail: 10 missing
+Rewards: 60/900 calls lack a scored reward (60 missing, 0 unscored).
+Rewards: 6 infrastructure-errored calls are excluded from the score, not counted as gaps.
+  pt-retail: 10 missing, 2 errored (excluded)
   ko-telecom: 50 missing
 Judges: 1/18 cells have applicable measures without a usable saved verdict.
   zh-airline: naturalness 48/50 judged (2 not judged)
@@ -117,6 +120,37 @@ To fill the gaps:
   - Rerun the original `tau2 run ... --save-to <root>` command with --auto-resume: ...
   - Then run `tau2 judges suite data/simulations/voice-run`: it judges only missing, stale and errored verdicts.
 ```
+
+Calls that ended in an infrastructure error (`termination_reason:
+infrastructure_error`) do not block a package. They are harness faults, not
+model failures, so they are excluded from the score's denominator: a cell is
+scored over its scored calls only, and a task whose calls all errored drops out
+of its cell's mean. The package reports them as `error_trials` per cell, per
+language, per domain and overall, and `prepare` prints the total. A cell is
+complete once every call is scored or errored, provided at least one is scored;
+a cell whose calls all errored still blocks. Missing and unscored calls still
+block. Rerunning with `--auto-resume` retries infrastructure errors if you want
+them scored.
+
+Judge verdicts blocked only because recorded Live speech has no transcript
+are recording gaps, not judge failures, so they do not block either. A verdict
+whose only unit errors are missing-Live-input (`kind: "input"`) errors counts
+as judged; its blocked units stay out of the pass fraction and are reported as
+`input_error_units`. A call a measure cannot judge at all for that reason (for
+call-level measures, any missing transcript) is excluded and reported as
+`input_excluded_calls`. Any other judge error (a model or API failure, an
+unparseable reply) still blocks. `tau2 judges suite` already asks again, in
+the same run, for units whose reply was incomplete or invalid (`--unit-retries`,
+default 2, keeping every successful unit); rerun it to retry what is left. A
+measure whose applicable calls are all excluded still blocks.
+
+The speech-fidelity judge runs at temperature 0, so a clip whose reply reaches
+the judge's output limit (usually a long, looping agent turn) does so on every
+retry. Such clips are reported as `output_limit_units` and do not block: the
+utterance counts as a Generation-quality issue when naturalness flagged it and
+is otherwise left out. At most 0.1% of a package's speech-fidelity clips may
+be left out this way; above that, `tau2 submit prepare` fails and lists the
+calls, and a maintainer reviews them.
 
 Only the default production judge catalog is accepted. Verdicts made with
 `--registry` bundles have a different catalog revision and will not validate.
@@ -139,7 +173,7 @@ The leaderboard has no 2.0 text tab yet. Text-v1 packages validate the same
 way, but `manifest.json` has no entry for them; open an issue before submitting
 one.
 
-### Banking and τ-entity (voice)
+### Banking and τ-Entity (voice)
 
 `voice-v2-banking` (`--benchmark banking`, 582 calls) and `voice-v2-entity`
 (`--benchmark entity`, 1200 calls) cover all six languages. Each is its own
@@ -155,8 +189,13 @@ tau2 submit prepare data/simulations/banking-run --output ./submissions \
   --metadata-file ./submitter.json
 
 # 3. Recompute rewards from the saved matrix.
-tau2 submit validate ./submissions/<name> --results data/simulations/banking-run
+tau2 submit validate ./submissions/<name>_banking --results data/simulations/banking-run
 ```
+
+`prepare` names these packages `<name>_banking` and `<name>_entity`, where
+`<name>` is the voice-v2 package name. Use the same `submitter.json` for all
+three packages, so they share the model name, organization and submission date.
+The suffix keeps their directories apart.
 
 Banking always runs with the `alltools` retrieval config, and entity with the
 agent-directed strategy. Other retrieval configs and the scaffolded strategy
@@ -175,10 +214,14 @@ is shown only when its domain is selected.
 |---|---|---|
 | `benchmark-submission.json` | text-v1, voice-v2 | The frozen frame, every task/trial observation, the per-cell, per-language and per-domain reward summary, and a SHA-256 of each cell's `results.json`. |
 | `benchmark-diagnostics.json` | voice-v2 only | The judge catalog and transport revisions, each judge contract used, and per cell: the same per-measure summary `tau2 judges summarize` prints, plus a fingerprint for every judged call × measure (`verdict_sha256` is the SHA-256 of the stored verdict). |
+| `benchmark-quality.json` | voice-v2 only | Call-level [Interaction](glossary.md#interaction) and [Generation quality](glossary.md#generation-quality) (`experience` in the file) for every scored call: the five Interaction flags, both outcomes, and per-cell pass/fail/unscored counts. `prepare` computes it from the saved calls and verdicts with no model calls; `validate` recomputes it and rejects any difference. Schema: [`schema_benchmark_quality.json`](../web/leaderboard/public/submissions/schema_benchmark_quality.json). |
 | `benchmark-metadata.json` | text-v1, voice-v2 | Your `submitter.json` fields, plus the agent provider and model recorded in the run conditions. Maintainers add `trajectories` (the S3 prefix) after upload. Schema: [`schema_benchmark_metadata.json`](../web/leaderboard/public/submissions/schema_benchmark_metadata.json). |
 
-The leaderboard reads these three files directly. A package must be complete:
-every cell scored, and, for voice-v2, diagnostics for every cell.
+The leaderboard reads these files directly. A package must be complete:
+every cell scored, and, for voice-v2, diagnostics and call quality for every
+cell. Call quality never blocks a package: a call whose verdicts or ticks
+cannot decide a measure is counted as unscored, not failed, and left out of
+that measure's rate.
 
 The package does not copy trajectories or audio. Maintainers validate it against
 your saved matrix root, which you upload separately (next step). `validate`
@@ -214,8 +257,7 @@ custom setup in `notes` and link it in `references`. Unknown fields are rejected
    `benchmark-plan.json`, `execution.json` and every cell directory with its
    `results.json`, `simulations/`, `artifacts/` (audio) and `diagnostics/`.
 2. **Add the package to the repository** as
-   `web/leaderboard/public/submissions/<name>/` (the three files `prepare`
-   wrote), and add `<name>` to the `voice_v2_submissions` array in
+   `web/leaderboard/public/submissions/<name>/` (the files `prepare` wrote), and add `<name>` to the `voice_v2_submissions` array in
    `web/leaderboard/public/submissions/manifest.json`. Commit only the package
    files, never the trajectories.
 3. **Open a pull request** (see [Pull request](#pull-request)) with the link to
@@ -223,18 +265,20 @@ custom setup in `notes` and link it in `references`. Unknown fields are rejected
    then copy the matrix to
    `s3://sierra-tau-bench-public/submissions/<name>/trajectories/<language>/<domain>/`.
 
-voice-v2 packages appear as rows of the τ³-Voice **τ-i18n (Multilingual)**
-leaderboard (`/leaderboard?benchmark=voice`), next to the paper cohort and
-marked "submission". They rank on task completion (pass@1, overall or for the
-selected language); Interaction and Generation quality are paper-cohort
-measures and show "—". A package's breakdown shows pass@1 per language × domain and each
+voice-v2 packages are the rows of the τ³-Voice **τ-i18n (Multilingual)**
+leaderboard (`/leaderboard?benchmark=voice`). Each row shows Task completion
+(pass@1, overall or for the selected domain) and, from the package's
+`benchmark-quality.json`, Interaction and Generation quality: the share of
+scored calls that pass, pooled over the scope shown. A package without that
+file shows "—" for both and stays out of the 3D explorer. A package's breakdown
+shows each score per language × domain, the five Interaction failures, and each
 judge measure per language with its coverage. Judge measures are diagnostics
 and never change the rank. 1.x and voice-v1 submissions keep their own tabs and
 are still accepted.
 
 The frozen 2026-10-02 voice-v2 release calls predate the matrix layout. A
 maintainer-only adapter, `tau2 submit prepare --historical-voice-v2`, reads
-those saved exports and writes the same three-file package; see
+those saved exports and writes the same package; see
 [Voice V2 release packages](voice-v2-publication.md).
 
 ---
@@ -705,10 +749,11 @@ See `web/leaderboard/public/submissions/A_EXAMPLE_voice-model_example-org_2026-0
 ### 2.0 packages (text-v1, voice-v2)
 
 - [ ] PR links the complete uploaded matrix root (`benchmark-frame.json` and every cell)
-- [ ] Package directory name equals `{model_name}_{model_organization}_{submission_date}`; `manifest.json` lists it in `voice_v2_submissions`
+- [ ] Package directory name equals `{model_name}_{model_organization}_{submission_date}`, plus `_banking` / `_entity` for those frames; `manifest.json` lists it in `voice_v2_submissions` (banking and entity: `voice_v2_domain_submissions`)
 - [ ] `benchmark-metadata.json` has a contact email; `submission_type` is right (if custom: `notes` and `references` explain the change)
 - [ ] `review_submission.py <package> <downloaded-root>` passes (it runs `tau2 submit validate`); with `--upload` it copies the matrix to `trajectories/<language>/<domain>/` and sets `trajectories`
 - [ ] voice-v2: `benchmark-diagnostics.json` present and made with the production judge catalog
+- [ ] voice-v2: `benchmark-quality.json` present (validation recomputes it from the uploaded calls and verdicts)
 - [ ] Spot-check: re-judge a sample of uploaded calls and compare unit outcomes with the matching fingerprints
 - [ ] No duplicate submissions
 

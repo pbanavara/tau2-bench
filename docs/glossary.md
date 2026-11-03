@@ -36,15 +36,40 @@ averaged over tasks within a cell, then over cells with equal weight.
 The full, fixed population a benchmark is scored over: every cell, every
 frozen task ID, and the trial indices. A run that covers only part of the
 frame (a slice or a `--num-tasks` sample) has no official score; the frame is the
-denominator. A saved run records its frame in `benchmark-frame.json` at the root.
+denominator. Calls that ended in an infrastructure error are the exception: they
+are harness faults, so they are excluded from the denominator and reported as
+`error_trials`. A saved run records its frame in `benchmark-frame.json` at the root.
 
 ## Generation quality
 
 The public name for the τ-i18n measure that papers, data and code call
-**Experience** (`experience`). It is the share of aligned agent utterances
-that pass both the naturalness and the speech-fidelity checks. The
-leaderboard shows it as Generation quality. Keys such as `experience` and
-the paper's `experience.json` keep the old name.
+**Experience** (`experience`). An agent utterance has an issue when the
+naturalness or the speech-fidelity judge flagged it. The paper reports the
+share of aligned utterances without an issue. Voice-v2 packages score it per
+call (`voice-v2-experience-call-v2`, in `benchmark-quality.json`): a call
+passes when at most 25% of its eligible agent utterances have an issue. It is
+*unscored*, never failed, unless both judges returned complete verdicts that
+pair every utterance. Live speech recorded without a transcript is a recording
+gap: those utterances are left out and the rest of the call is scored. So is
+an utterance whose speech-fidelity clip still hit the judge's output limit
+after retries, unless naturalness flagged it, in which case it counts as an
+issue. The leaderboard shows it as Generation quality and rates
+it as passed / (passed + failed). Keys such as `experience` and the paper's
+`experience.json` keep the old name.
+
+## Interaction
+
+The call-level turn-taking measure of voice-v2 packages
+(`voice-v2-interaction-call-v1`, in `benchmark-quality.json`). Each scored
+call gets five flags: **nonresponse** (a missed caller turn, a mean reply
+latency over 3 s, or an unyielded interruption), **interruption** (more than 3
+agent onsets over caller speech), **selectivity** (more than 3 errors summed
+over backchannels, vocal tics and non-directed speech), **monologue** (an agent
+floor hold over 45 s) and **tool_misuse** (the saved `tool_use` judge verdict).
+The first four come from the call's ticks; a flag is unknown when the call has
+no opportunity for it. A call fails with at least two known flags set, passes
+when even all unknown flags set could not reach two, and is otherwise
+unscored. The rate is passed / (passed + failed).
 
 ## Judge
 
@@ -58,7 +83,12 @@ must be run before `tau2 submit prepare`.
 One named quantity a judge reports, such as `naturalness`, `speech_fidelity`
 or `tool_use`. A measure applies to some languages and not
 others; `tau2 judges summarize` lists, for each cell and measure, how many calls
-it applies to, how many were judged, and the pass and fail counts.
+it applies to, how many were judged, and the pass and fail counts. Calls a
+measure cannot judge because recorded Live speech has no transcript are
+excluded from it and counted as `input_excluded_calls`; they do not block a
+submission. Speech-fidelity clips whose judge reply hit its output limit are
+counted as `output_limit_units` and do not block either, up to 0.1% of a
+package's clips.
 
 ## Pack
 
@@ -84,6 +114,6 @@ seeds. The released benchmarks are scored at one trial (pass@1);
 
 The multilingual voice benchmark (`voice-v2`). Older docs and identifiers call it τ-Multilingual or "multilingual".
 
-## τ-entity
+## τ-Entity
 
-The entity-capture benchmark on the `intake` domain. Older docs and identifiers call it "elicitation". See [τ-entity](elicitation.md).
+The entity-capture benchmark on the `intake` domain. Older docs and identifiers call it "elicitation". See [τ-Entity](elicitation.md).

@@ -25,7 +25,7 @@ For how the commands fit together, see
 | [`tau2 run`](#tau2-run) | Run a benchmark |
 | [`tau2 run-pass3`](#tau2-run-pass3) | Run Pass^3 on three ordinary or crossed trials |
 | [`tau2 languages`](#tau2-languages) | Inspect and validate published language packs |
-| [`tau2 intake-tasks`](#tau2-intake-tasks) | Generate and verify τ-entity tasks |
+| [`tau2 intake-tasks`](#tau2-intake-tasks) | Generate and verify τ-Entity tasks |
 | [`tau2 play`](#tau2-play) | Play manual mode - interact with a domain as the agent |
 | [`tau2 view`](#tau2-view) | View simulation results |
 | [`tau2 domain`](#tau2-domain) | Show domain documentation |
@@ -63,8 +63,8 @@ options:
 ```text
 usage: tau2 judges suite [-h] [--only ONLY] [--trials TRIALS [TRIALS ...]]
                          [--processes PROCESSES] [--concurrency CONCURRENCY]
-                         [--preserve-errors] [--force] [--dry-run]
-                         [--registry REGISTRY] [--json] [--output OUTPUT]
+                         [--unit-retries UNIT_RETRIES] [--preserve-errors] [--force]
+                         [--dry-run] [--registry REGISTRY] [--json] [--output OUTPUT]
                          results
 
 positional arguments:
@@ -79,6 +79,9 @@ options:
                         Independent judge workers; default 1
   --concurrency CONCURRENCY
                         Judge calls in flight per worker; default 1
+  --unit-retries UNIT_RETRIES
+                        Further attempts at units whose judge reply was incomplete or
+                        invalid, in the same run; default 2
   --preserve-errors     Keep recorded judge errors/partials while filling missing
                         verdicts
   --force               Recompute matching verdicts
@@ -735,9 +738,10 @@ usage: tau2 run [-h] [--communicate-scorer {semantic,substring}]
                 [--max-retries MAX_RETRIES] [--retry-delay RETRY_DELAY]
                 [--enforce-communication-protocol] [--user-persona USER_PERSONA]
                 [--audio-native]
-                [--audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,livekit,launa}]
+                [--audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,avartha_pipecat,phonic,livekit,launa}]
                 [--cascaded-config CASCADED_CONFIG]
-                [--audio-native-model AUDIO_NATIVE_MODEL] [--live-config LIVE_CONFIG]
+                [--audio-native-model AUDIO_NATIVE_MODEL]
+                [--avartha-base-url AVARTHA_BASE_URL] [--live-config LIVE_CONFIG]
                 [--realtime-generation | --no-realtime-generation]
                 [--reasoning-effort {minimal,low,medium,high,xhigh}]
                 [--tick-duration TICK_DURATION]
@@ -805,10 +809,10 @@ options:
   --user {user_simulator,dummy_user,voice_streaming_user_simulator}
                         The user implementation to use. Default is user_simulator.
   --user-llm USER_LLM   The LLM to use for the user. Default is gpt-4.1-2025-04-14;
-                        τ-entity uses gpt-5.5.
+                        τ-Entity uses gpt-5.5.
   --user-llm-args USER_LLM_ARGS
                         The arguments to pass to the LLM for the user. Default is
-                        '{"temperature": 0.0}'; the default τ-entity caller uses
+                        '{"temperature": 0.0}'; the default τ-Entity caller uses
                         {"temperature": 0.0, "reasoning_effort": "low"}.
   --task-set-name {mock,airline,retail,telecom_full,telecom_small,telecom,telecom-workflow,banking_knowledge,intake}
                         The task set to run the simulation on. If not provided, will
@@ -886,7 +890,7 @@ options:
   --audio-native        Enable audio-native mode using DiscreteTimeAudioNativeAgent
                         with VoiceStreamingUserSimulator. This enables full-duplex
                         voice simulation using audio native APIs.
-  --audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,livekit,launa}
+  --audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,avartha_pipecat,phonic,livekit,launa}
                         Audio native API provider. Default is 'openai'.
   --cascaded-config CASCADED_CONFIG
                         Cascaded config preset name for livekit provider. Available
@@ -894,14 +898,21 @@ options:
                         tau2.data_model.cascaded for details.
   --audio-native-model AUDIO_NATIVE_MODEL
                         Audio native model to use. If not specified, uses the default
-                        model for the selected provider.
+                        model for the selected provider. For avartha_pipecat, it is
+                        only a label, since --avartha-base-url selects the agent.
+  --avartha-base-url AVARTHA_BASE_URL
+                        URL of the hosted Avartha agent the avartha_pipecat provider
+                        calls, https://<host>/inference/serverless/pipecat/v1/public/<
+                        agent_id>. Required for that provider, which also needs the
+                        live extra and AVARTHA_API_KEY.
   --live-config LIVE_CONFIG
                         JSON config for openai_live: backend_model (required), voice,
                         and optional frontend_prompt/backend_prompt overrides.
   --realtime-generation, --no-realtime-generation
                         Run user LLM/TTS generation without blocking audio ticks.
-                        Defaults to enabled for openai_live and disabled for other
-                        providers. Use --no-realtime-generation to disable.
+                        Defaults to enabled for openai_live and avartha_pipecat and
+                        disabled for other providers. Use --no-realtime-generation to
+                        disable.
   --reasoning-effort {minimal,low,medium,high,xhigh}
                         Reasoning effort for thinking models. Only applies to
                         providers that support it (e.g. OpenAI).
@@ -910,7 +921,7 @@ options:
                         0.2.
   --max-steps-seconds MAX_STEPS_SECONDS
                         Maximum conversation duration in seconds. Default is 1200;
-                        τ-entity uses 240.
+                        τ-Entity uses 240.
   --speech-complexity {control,regular,control_audio,control_accents,control_behavior,control_audio_accents,control_audio_behavior,control_accents_behavior}
                         Speech complexity level for audio effects. Default is
                         'regular'.
@@ -1007,9 +1018,10 @@ usage: tau2 run-pass3 [-h] [--communicate-scorer {semantic,substring}]
                       [--max-retries MAX_RETRIES] [--retry-delay RETRY_DELAY]
                       [--enforce-communication-protocol] [--user-persona USER_PERSONA]
                       [--audio-native]
-                      [--audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,livekit,launa}]
+                      [--audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,avartha_pipecat,phonic,livekit,launa}]
                       [--cascaded-config CASCADED_CONFIG]
                       [--audio-native-model AUDIO_NATIVE_MODEL]
+                      [--avartha-base-url AVARTHA_BASE_URL]
                       [--live-config LIVE_CONFIG]
                       [--realtime-generation | --no-realtime-generation]
                       [--reasoning-effort {minimal,low,medium,high,xhigh}]
@@ -1081,10 +1093,10 @@ options:
   --user {user_simulator,dummy_user,voice_streaming_user_simulator}
                         The user implementation to use. Default is user_simulator.
   --user-llm USER_LLM   The LLM to use for the user. Default is gpt-4.1-2025-04-14;
-                        τ-entity uses gpt-5.5.
+                        τ-Entity uses gpt-5.5.
   --user-llm-args USER_LLM_ARGS
                         The arguments to pass to the LLM for the user. Default is
-                        '{"temperature": 0.0}'; the default τ-entity caller uses
+                        '{"temperature": 0.0}'; the default τ-Entity caller uses
                         {"temperature": 0.0, "reasoning_effort": "low"}.
   --task-set-name {mock,airline,retail,telecom_full,telecom_small,telecom,telecom-workflow,banking_knowledge,intake}
                         The task set to run the simulation on. If not provided, will
@@ -1162,7 +1174,7 @@ options:
   --audio-native        Enable audio-native mode using DiscreteTimeAudioNativeAgent
                         with VoiceStreamingUserSimulator. This enables full-duplex
                         voice simulation using audio native APIs.
-  --audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,livekit,launa}
+  --audio-native-provider {openai,openai_live,gemini,xai,nova,qwen,avartha_pipecat,phonic,livekit,launa}
                         Audio native API provider. Default is 'openai'.
   --cascaded-config CASCADED_CONFIG
                         Cascaded config preset name for livekit provider. Available
@@ -1170,14 +1182,21 @@ options:
                         tau2.data_model.cascaded for details.
   --audio-native-model AUDIO_NATIVE_MODEL
                         Audio native model to use. If not specified, uses the default
-                        model for the selected provider.
+                        model for the selected provider. For avartha_pipecat, it is
+                        only a label, since --avartha-base-url selects the agent.
+  --avartha-base-url AVARTHA_BASE_URL
+                        URL of the hosted Avartha agent the avartha_pipecat provider
+                        calls, https://<host>/inference/serverless/pipecat/v1/public/<
+                        agent_id>. Required for that provider, which also needs the
+                        live extra and AVARTHA_API_KEY.
   --live-config LIVE_CONFIG
                         JSON config for openai_live: backend_model (required), voice,
                         and optional frontend_prompt/backend_prompt overrides.
   --realtime-generation, --no-realtime-generation
                         Run user LLM/TTS generation without blocking audio ticks.
-                        Defaults to enabled for openai_live and disabled for other
-                        providers. Use --no-realtime-generation to disable.
+                        Defaults to enabled for openai_live and avartha_pipecat and
+                        disabled for other providers. Use --no-realtime-generation to
+                        disable.
   --reasoning-effort {minimal,low,medium,high,xhigh}
                         Reasoning effort for thinking models. Only applies to
                         providers that support it (e.g. OpenAI).
@@ -1186,7 +1205,7 @@ options:
                         0.2.
   --max-steps-seconds MAX_STEPS_SECONDS
                         Maximum conversation duration in seconds. Default is 1200;
-                        τ-entity uses 240.
+                        τ-Entity uses 240.
   --speech-complexity {control,regular,control_audio,control_accents,control_behavior,control_audio_accents,control_audio_behavior,control_accents_behavior}
                         Speech complexity level for audio effects. Default is
                         'regular'.
@@ -1583,11 +1602,12 @@ options:
                         contact_info.email
   --historical-voice-v2
                         Maintainers only: read the frozen 2026-10-02 Voice V2 release
-                        export
+                        export; --benchmark voice (default), banking or entity selects
+                        the frame
   --judges-root JUDGES_ROOT
-                        With --historical-voice-v2: a provider's saved verdict
-                        directory (<language>/<simulation-id>.json); repeat for each
-                        judge suite
+                        With --historical-voice-v2 (voice frame only): a provider's
+                        saved verdict directory (<language>/<simulation-id>.json);
+                        repeat for each judge suite
 ```
 
 ### `tau2 submit validate`
@@ -1610,11 +1630,12 @@ options:
                         validation
   --historical-voice-v2
                         Maintainers only: read the frozen 2026-10-02 Voice V2 release
-                        export
+                        export; --benchmark voice (default), banking or entity selects
+                        the frame
   --judges-root JUDGES_ROOT
-                        With --historical-voice-v2: a provider's saved verdict
-                        directory (<language>/<simulation-id>.json); repeat for each
-                        judge suite
+                        With --historical-voice-v2 (voice frame only): a provider's
+                        saved verdict directory (<language>/<simulation-id>.json);
+                        repeat for each judge suite
 ```
 
 ### `tau2 submit verify-trajs`

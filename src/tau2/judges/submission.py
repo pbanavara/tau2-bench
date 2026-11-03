@@ -29,12 +29,16 @@ from tau2.data_model.judges import (
     PlanAction,
     StoredVerdict,
     SuitePlan,
+    is_fidelity_output_limit,
 )
 from tau2.judges.summary import DiagnosticSummary, summarize_suite
 
 # Benchmarks whose official package must carry complete judge diagnostics.
 JUDGED_BENCHMARKS = frozenset({"voice-v2"})
 DIAGNOSTICS_FILE_NAME = "benchmark-diagnostics.json"
+# At most 1/OUTPUT_LIMIT_DIVISOR (0.1%) of a package's speech-fidelity clips may
+# be left out because the judge reply hit its output limit.
+OUTPUT_LIMIT_DIVISOR = 1000
 
 
 def _sha256(value: JsonValue) -> str:
@@ -89,6 +93,21 @@ class VerdictFingerprint(ContractModel):
     error_units: Annotated[
         int, Field(ge=0, description="Units the judge failed on (partial verdicts).")
     ] = 0
+    input_error_units: Annotated[
+        int,
+        Field(
+            ge=0,
+            description="Units (within error_units) blocked by missing Live input.",
+        ),
+    ] = 0
+    output_limit_units: Annotated[
+        int,
+        Field(
+            ge=0,
+            exclude_if=lambda count: count == 0,
+            description="Speech-fidelity clips (within error_units) whose judge reply hit its output limit.",
+        ),
+    ] = 0
 
 
 class CellDiagnostics(ContractModel):
@@ -111,8 +130,21 @@ class CellDiagnostics(ContractModel):
         for summary in self.summary:
             rows = [row for row in self.verdicts if row.measure == summary.measure]
             if (
-                sum(not row.error_units for row in rows) != summary.judged_calls
-                or sum(bool(row.error_units) for row in rows) != summary.partial_calls
+                # Only missing Live input or a fidelity output limit may leave
+                # a judged call's units unjudged.
+                sum(
+                    row.error_units == row.input_error_units + row.output_limit_units
+                    for row in rows
+                )
+                != summary.judged_calls
+                or sum(
+                    bool(row.error_units)
+                    and bool(row.pass_units + row.fail_units + row.no_opportunity_units)
+                    for row in rows
+                )
+                != summary.partial_calls
+                or sum(row.output_limit_units for row in rows)
+                != summary.output_limit_units
                 or sum(row.pass_units for row in rows) != summary.pass_units
                 or sum(row.fail_units for row in rows) != summary.fail_units
                 or sum(row.no_opportunity_units for row in rows)
@@ -202,8 +234,16 @@ def _cell_rows(
             or row.identity != item.identity
             or row.error is not None
             or row.verdict is None
-            # A partial verdict without units adds nothing to the summary.
-            or (row.verdict.unit_errors and not row.verdict.units)
+            # A partial verdict without units adds nothing to the summary,
+            # unless it is judged because only fidelity output limits failed.
+            or (
+                row.verdict.unit_errors
+                and not row.verdict.units
+                and not any(
+                    is_fidelity_output_limit(item.measure, error)
+                    for error in row.verdict.unit_errors
+                )
+            )
         ):
             continue
         units = row.verdict.units
@@ -220,6 +260,13 @@ def _cell_rows(
                 fail_units=sum(u.opportunity and u.violation for u in units),
                 no_opportunity_units=sum(not u.opportunity for u in units),
                 error_units=len(row.verdict.unit_errors),
+                input_error_units=sum(
+                    error.kind == "input" for error in row.verdict.unit_errors
+                ),
+                output_limit_units=sum(
+                    is_fidelity_output_limit(item.measure, error)
+                    for error in row.verdict.unit_errors
+                ),
             )
         )
         used.append(row)
@@ -307,3 +354,35 @@ def export_diagnostics(
         judges=sorted(judges.values(), key=lambda judge: judge.contract_id),
         cells=exported,
     )
+
+
+def output_limit_overage(diagnostics: BenchmarkDiagnostics) -> list[str]:
+    """Lines describing an over-cap share of fidelity output-limit clips, if any.
+
+    Such clips are left out of scoring rather than blocking their call. A judge
+    failure that rare is tolerated; a model whose speech keeps sending the judge
+    into a runaway reply needs review instead of silently losing those clips.
+    """
+    limited = judged = 0
+    calls = []
+    for cell in diagnostics.cells:
+        for summary in cell.summary:
+            if summary.measure == "speech_fidelity":
+                limited += summary.output_limit_units
+                judged += (
+                    summary.pass_units + summary.fail_units + summary.output_limit_units
+                )
+        calls.extend(
+            f"  {cell.language}-{cell.domain} {row.simulation_id} trial "
+            f"{row.trial}: {row.output_limit_units} clip(s)"
+            for row in cell.verdicts
+            if row.output_limit_units
+        )
+    if OUTPUT_LIMIT_DIVISOR * limited <= judged:
+        return []
+    return [
+        f"Judges: {limited} of {judged} speech-fidelity clips hit the judge's "
+        f"output limit, above the 1/{OUTPUT_LIMIT_DIVISOR} allowed. A maintainer "
+        "must review these calls:",
+        *calls,
+    ]

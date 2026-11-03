@@ -1014,9 +1014,15 @@ def _judge_gaps(coverage) -> list[str]:
                     (measure.not_judged_calls, "not judged"),
                     (measure.error_calls, "judge errors"),
                     (measure.missing_input_calls, "missing audio"),
+                    (
+                        measure.input_excluded_calls,
+                        "excluded for missing Live transcripts",
+                    ),
                 )
                 if count
             ]
+            if measure.applicable_calls and not measure.judged_calls:
+                reasons.append("no judged call")
             parts.append(
                 f"{measure.measure} {measure.judged_calls}/"
                 f"{measure.applicable_calls} judged ({', '.join(reasons)})"
@@ -1047,8 +1053,9 @@ def _incomplete_message(root: Path, frame, summary, judge_coverage) -> str:
         lines.append(
             "  - Rerun the original `tau2 run ... --save-to <root>` command with "
             "--auto-resume: it keeps finished calls, adds missing ones and retries "
-            "infrastructure errors. Unscored and unexpected-error calls are not "
-            "retried; remove them from the cell results first."
+            "infrastructure errors (only required for a cell with no scored call). "
+            "Unscored and unexpected-error calls are not retried; remove them from "
+            "the cell results first."
         )
     if judge_coverage is not None:
         lines.append(
@@ -1065,12 +1072,20 @@ def _incomplete_message(root: Path, frame, summary, judge_coverage) -> str:
 
 
 def _benchmark_package(root: Path, preset: str | None):
-    """Rewards (and, for judged benchmarks, diagnostics) from one saved matrix."""
+    """Rewards plus, for judged benchmarks, diagnostics and call quality."""
     from tau2.data_model.benchmark import BenchmarkFrame
-    from tau2.judges.submission import JUDGED_BENCHMARKS, collect_diagnostics
+    from tau2.judges.submission import (
+        JUDGED_BENCHMARKS,
+        collect_diagnostics,
+        output_limit_overage,
+    )
     from tau2.judges.validation import production_catalog
     from tau2.metrics.benchmark import IncompleteSubmissionError, export_submission
     from tau2.runner.presets import infer_preset, verify_frame
+    from tau2.scripts.leaderboard.benchmark_quality import (
+        QUALITY_BENCHMARKS,
+        collect_quality,
+    )
 
     frame = BenchmarkFrame.model_validate_json(
         (root / "benchmark-frame.json").read_text()
@@ -1078,18 +1093,21 @@ def _benchmark_package(root: Path, preset: str | None):
     preset = infer_preset(frame, preset)
     verify_frame(frame, preset)
     submission = export_submission(root, frame)
-    judge_coverage = diagnostics = None
+    judge_coverage = diagnostics = quality = None
     if frame.benchmark_version in JUDGED_BENCHMARKS:
-        judge_coverage, diagnostics = collect_diagnostics(
-            root, frame, production_catalog([])
-        )
+        catalog = production_catalog([])
+        judge_coverage, diagnostics = collect_diagnostics(root, frame, catalog)
     if not submission.summary.complete or (
         judge_coverage is not None and diagnostics is None
     ):
         raise IncompleteSubmissionError(
             _incomplete_message(root, frame, submission.summary, judge_coverage)
         )
-    return submission, diagnostics
+    if diagnostics is not None and (overage := output_limit_overage(diagnostics)):
+        raise IncompleteSubmissionError("\n".join(overage))
+    if diagnostics is not None and frame.benchmark_version in QUALITY_BENCHMARKS:
+        quality = collect_quality(root, frame, catalog)
+    return submission, diagnostics, quality
 
 
 def _recorded_agent(root: Path, frame) -> tuple[str | None, str]:
@@ -1112,7 +1130,7 @@ def _matrix_package(root: Path, preset: str | None, submitter):
         PackageMetadata,
     )
 
-    submission, diagnostics = _benchmark_package(root, preset)
+    submission, diagnostics, quality = _benchmark_package(root, preset)
     provider, model = _recorded_agent(root, submission.frame)
     return BenchmarkPackage(
         metadata=PackageMetadata(
@@ -1120,6 +1138,7 @@ def _matrix_package(root: Path, preset: str | None, submitter):
         ),
         submission=submission,
         diagnostics=diagnostics,
+        quality=quality,
     ).check()
 
 
@@ -1139,6 +1158,25 @@ def prepare_benchmark_submission(
     destination = output / package.name
     package.write(destination)
     print(f"Saved {destination}")
+    summary = package.submission.summary
+    if summary.error_trials:
+        print(
+            f"{summary.error_trials}/{summary.expected_trials} calls ended in an "
+            "infrastructure error; they are excluded from the score and reported "
+            "as error_trials."
+        )
+    if package.diagnostics is not None:
+        excluded = sum(
+            measure.input_excluded_calls
+            for cell in package.diagnostics.cells
+            for measure in cell.summary
+        )
+        if excluded:
+            print(
+                f"{excluded} judge call/measure pairs lack a Live transcript; they "
+                "are excluded from judge diagnostics and reported as "
+                "input_excluded_calls."
+            )
     print(f"Check it with: tau2 submit validate {destination} --results {root}")
     return destination
 
@@ -1169,6 +1207,8 @@ def validate_benchmark_submission(
         raise ValueError("Submission differs from original saved result evidence")
     if expected.diagnostics != package.diagnostics:
         raise ValueError("Judge diagnostics differ from the original saved verdicts")
+    if expected.quality != package.quality:
+        raise ValueError("Call quality differs from the original saved calls")
     if expected.metadata != package.metadata:
         raise ValueError("Recorded agent identity differs from the saved matrix")
     return package

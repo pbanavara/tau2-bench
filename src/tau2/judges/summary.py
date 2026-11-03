@@ -14,7 +14,9 @@ from tau2.data_model.judges import (
     StoredVerdict,
     SuitePlan,
     SuiteResult,
+    is_fidelity_output_limit,
 )
+from tau2.judges.run_evidence import is_live_input_call_error
 from tau2.judges.suite import JudgeExecutionConfig, judge_saved_run
 
 
@@ -33,7 +35,9 @@ class DiagnosticSummary(ContractModel):
     ]
     judged_calls: Annotated[
         int,
-        Field(description="Applicable calls with matching successful saved verdicts."),
+        Field(
+            description="Applicable calls with matching saved verdicts whose only unit errors, if any, are missing Live input or speech-fidelity output limits."
+        ),
     ]
     not_judged_calls: Annotated[
         int,
@@ -41,7 +45,12 @@ class DiagnosticSummary(ContractModel):
             description="Applicable calls with no matching successful/error verdict."
         ),
     ]
-    error_calls: Annotated[int, Field(description="Matching saved judge errors.")]
+    error_calls: Annotated[
+        int,
+        Field(
+            description="Matching saved judge errors other than missing Live input or speech-fidelity output limits."
+        ),
+    ]
     missing_input_calls: Annotated[
         int, Field(description="Applicable calls missing required audio/reference.")
     ]
@@ -61,11 +70,26 @@ class DiagnosticSummary(ContractModel):
         default=0, description="Unjudged units excluded from pass fractions."
     )
     partial_calls: int = Field(
-        default=0, description="Error calls with some successful units."
+        default=0, description="Calls with unit errors and some successful units."
+    )
+    input_excluded_calls: int = Field(
+        default=0,
+        description="Applicable calls left unjudged only because recorded Live speech lacks a transcript; excluded, not blocking.",
+    )
+    input_error_units: int = Field(
+        default=0,
+        description="Units (within error_units) blocked by missing Live input.",
+    )
+    output_limit_units: int = Field(
+        default=0,
+        exclude_if=lambda count: count == 0,
+        description="Speech-fidelity clips (within error_units) whose judge reply hit its output limit; left out of scoring, capped at preparation.",
     )
     complete: Annotated[
         bool,
-        Field(description="Every applicable call has a matching usable saved verdict."),
+        Field(
+            description="Every applicable call is judged or excluded for missing Live input, and at least one is judged."
+        ),
     ]
     observed_pass_fraction: Annotated[
         float | None,
@@ -78,7 +102,17 @@ class DiagnosticSummary(ContractModel):
 def summarize_suite(
     plan: SuitePlan, stored: list[StoredVerdict]
 ) -> list[DiagnosticSummary]:
-    """Summarize recorded diagnostics without model calls or reward mutation."""
+    """Summarize recorded diagnostics without model calls or reward mutation.
+
+    Missing Live transcripts are recording gaps, not judge failures: a verdict
+    whose only unit errors are ``input`` errors counts as judged (its blocked
+    units stay out of the pass fraction), and a call with no judgeable unit for
+    that reason is excluded and counted in ``input_excluded_calls``. A
+    speech-fidelity clip whose reply hit the judge's output limit is likewise
+    left out (``output_limit_units``) without blocking its call. Any other
+    judge error still blocks, and a measure with applicable calls needs at
+    least one judged call.
+    """
     records = {
         (
             row.identity.input.run_id,
@@ -94,6 +128,7 @@ def summarize_suite(
     for measure in dict.fromkeys(item.measure for item in plan.items):
         applicable = judged = not_judged = errors = missing_input = not_applicable = 0
         passed = failed = no_opportunity = error_units = partial = 0
+        excluded = input_units = limit_units = 0
         for item in (item for item in plan.items if item.measure == measure):
             if item.action == PlanAction.NOT_APPLICABLE:
                 not_applicable += 1
@@ -113,15 +148,27 @@ def summarize_suite(
             if row is None or row.identity != item.identity:
                 not_judged += 1
             elif row.error is not None:
-                errors += 1
+                if is_live_input_call_error(row.error):
+                    excluded += 1
+                else:
+                    errors += 1
             else:
                 assert row.verdict is not None
-                if row.verdict.unit_errors:
+                unit_errors = row.verdict.unit_errors
+                blocked = sum(error.kind == "input" for error in unit_errors)
+                limited = sum(
+                    is_fidelity_output_limit(measure, error) for error in unit_errors
+                )
+                error_units += len(unit_errors)
+                input_units += blocked
+                limit_units += limited
+                partial += bool(unit_errors and row.verdict.units)
+                if blocked + limited < len(unit_errors):
                     errors += 1
-                    error_units += len(row.verdict.unit_errors)
-                    partial += bool(row.verdict.units)
-                else:
+                elif row.verdict.units or not unit_errors or limited:
                     judged += 1
+                else:
+                    excluded += 1
                 for unit in row.verdict.units:
                     if not unit.opportunity:
                         no_opportunity += 1
@@ -143,7 +190,11 @@ def summarize_suite(
                 no_opportunity_units=no_opportunity,
                 error_units=error_units,
                 partial_calls=partial,
-                complete=applicable == judged,
+                input_excluded_calls=excluded,
+                input_error_units=input_units,
+                output_limit_units=limit_units,
+                complete=applicable == judged + excluded
+                and (judged > 0 or not applicable),
                 observed_pass_fraction=passed / (passed + failed)
                 if passed + failed
                 else None,

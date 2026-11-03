@@ -394,6 +394,20 @@ class UnitError(ContractModel):
     usage: dict[str, JsonValue] | None = None
 
 
+def is_fidelity_output_limit(measure: str, error: UnitError) -> bool:
+    """A speech-fidelity clip whose judge reply still hit its output limit.
+
+    The fidelity judge runs at temperature 0, so retrying such a clip repeats
+    the same runaway reply. The clip is left out of scoring instead of blocking
+    the call; every other response error still blocks.
+    """
+    return (
+        measure == Measure.SPEECH_FIDELITY
+        and error.kind == "response"
+        and error.finish_reason == "length"
+    )
+
+
 class MeasureVerdict(ContractModel):
     """Validated adapter output; an empty response is an error, never a pass."""
 

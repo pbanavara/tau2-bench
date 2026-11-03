@@ -12,6 +12,8 @@ Full-duplex voice evaluation via provider-specific realtime APIs. Each provider 
 | **xai** | Native audio | xAI Grok Voice Agent | grok-voice-think-fast-2.0 |
 | **nova** | Native audio | Amazon Nova Sonic | amazon.nova-2-sonic-v1:0 |
 | **qwen** | Native audio | Alibaba Qwen Omni | qwen3-omni-flash-realtime |
+| **avartha_pipecat** | Hosted voice agent | Avartha over Pipecat SmallWebRTC | Agent URL (`--avartha-base-url`) |
+| **phonic** | Native audio | Phonic speech-to-speech | phonic-1 |
 | **livekit** | Cascaded (STT→LLM→TTS) | LiveKit + Deepgram + OpenAI | Configurable |
 
 ## Architecture
@@ -27,6 +29,8 @@ DiscreteTimeAdapter (adapter.py)          ← shared base class
 ├── xai/discrete_time_adapter.py
 ├── qwen/discrete_time_adapter.py
 ├── nova/discrete_time_adapter.py
+├── avartha_pipecat/discrete_time_adapter.py
+├── phonic/discrete_time_adapter.py       ← realtime audio pump (see phonic/README.md)
 └── livekit/discrete_time_adapter.py      ← own run_tick (cascaded pipeline, different interaction model)
 ```
 
@@ -36,6 +40,24 @@ Each provider has:
 - `discrete_time_adapter.py` — Implements `_execute_tick()`: convert audio, send, receive, process events
 
 The base class handles: TickResult creation, audio buffering/capping, proportional transcript distribution, barge-in buffer clearing, tool result queuing, tick timing enforcement, and cumulative state tracking.
+
+## Avartha
+
+Call a hosted Avartha agent over Pipecat SmallWebRTC (requires the `live`
+extra and `AVARTHA_API_KEY`):
+
+```bash
+export AVARTHA_API_KEY=<your-api-key>
+tau2 run --audio-native --benchmark none --domain retail \
+  --audio-native-provider avartha_pipecat \
+  --avartha-base-url https://<host>/inference/serverless/pipecat/v1/public/<agent_id> \
+  --num-tasks 1
+```
+
+The adapter installs the domain policy as the call's prompt, registers the
+domain tools, and records the call's session ID on each simulation. See the
+[Avartha provider guide](avartha_pipecat/README.md) for the protocol,
+options, and live test setup.
 
 ## Adding a New Provider
 

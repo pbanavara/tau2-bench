@@ -59,11 +59,13 @@ from tau2.runner.hallucination_checkpoint import (
     save_review_checkpoint,
 )
 from tau2.runner.helpers import get_info, make_run_name, select_run_tasks
+from tau2.runner.presets import uses_canonical_tasks
 from tau2.runner.progress import StatusMonitor, run_with_retry
 from tau2.runner.simulation import run_simulation
 from tau2.runner.work import WorkQueue, WorkUnit, make_unit_id
 from tau2.user_simulation_voice_presets import COMPLEXITY_CONFIGS
 from tau2.utils.display import ConsoleDisplay, Text
+from tau2.utils.errors import NonRetryableError
 from tau2.utils.llm_utils import llm_log_mode, set_llm_log_dir, set_llm_log_mode
 from tau2.utils.utils import DATA_DIR
 
@@ -443,7 +445,10 @@ def run_single_task(
             _build_env_kwargs(config, task, language_context=call_language) or None
         )
         simulation = run_simulation(
-            orchestrator, evaluation_type=evaluation_type, env_kwargs=env_kwargs
+            orchestrator,
+            evaluation_type=evaluation_type,
+            env_kwargs=env_kwargs,
+            canonical_tasks=uses_canonical_tasks(config.benchmark),
         )
 
         simulation.complication = sample_run_complication(config, task)
@@ -1113,10 +1118,11 @@ def run_tasks(
     tasks_by_id = {task.id: task for task in tasks}
     queue = WorkQueue(prep.units, max_attempts=1, lease_ttl_seconds=float("inf"))
     results_lock = threading.Lock()
+    fatal_stop = threading.Event()
 
     def _consume(consumer_idx: int) -> None:
         worker_id = f"local-{consumer_idx}"
-        while not shutdown_event.is_set():
+        while not shutdown_event.is_set() and not fatal_stop.is_set():
             unit = queue.lease(worker_id)
             if unit is None:
                 return
@@ -1130,6 +1136,8 @@ def run_tasks(
                 )
             except BaseException as e:
                 queue.fail(unit.unit_id, str(e), worker_id=worker_id)
+                if isinstance(e, NonRetryableError):
+                    fatal_stop.set()
                 raise
             queue.complete(unit.unit_id, worker_id=worker_id)
             with results_lock:
@@ -1164,7 +1172,9 @@ def run_tasks(
     finally:
         monitor.stop()
         if not shutdown_event.is_set():
-            executor.shutdown(wait=True)
+            executor.shutdown(
+                wait=not fatal_stop.is_set(), cancel_futures=fatal_stop.is_set()
+            )
 
     ConsoleDisplay.console.print(
         "\n[bold green]Successfully completed all simulations![/bold green]\n"

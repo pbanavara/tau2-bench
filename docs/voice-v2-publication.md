@@ -5,7 +5,8 @@ layout (`<language>-<domain>/` cells, `benchmark-frame.json`) and before some
 recorded condition fields existed, so `tau2 submit prepare <matrix-root>` cannot
 read them. A maintainer-only adapter reads the saved release exports and writes
 **the same package** a new submission produces: `benchmark-submission.json`,
-`benchmark-diagnostics.json` and `benchmark-metadata.json` (see
+`benchmark-diagnostics.json`, `benchmark-quality.json` and
+`benchmark-metadata.json` (see
 [What the 2.0 package contains](leaderboard-submission.md#what-the-20-package-contains)).
 The website and the review tooling treat both alike.
 
@@ -67,6 +68,86 @@ leaderboard; they never become failures. All verdicts must share one judge
 catalog revision. New submissions are stricter: `prepare` refuses unless every
 applicable measure is fully judged.
 
+Call quality (`benchmark-quality.json`) is computed the same way as for a new
+submission: Interaction from each scored call's saved ticks plus its saved
+`tool_use` verdict, Experience from its saved `naturalness` and
+`speech_fidelity` verdicts (see [Interaction](glossary.md#interaction) and
+[Generation quality](glossary.md#generation-quality)). A partial verdict
+leaves the affected component unknown or the call's Experience unscored.
+Utterances blocked by a missing Live transcript are the exception: as in judge
+diagnostics, they are left out and the rest of the call is scored
+(`voice-v2-experience-call-v2`). So is an utterance whose speech-fidelity clip
+hit the judge's output limit after retries, unless naturalness flagged it
+(then it counts as an issue); preparation caps these at 0.1% of clips. Infrastructure-error calls carry no quality
+record. Outside Live
+runs the two judges number utterances differently. Pairing follows the agent
+chunk groups of the saved ticks (`utterance_alignment`), never ordinal
+position.
+
+For the 2026-10-02 export, `voice-v2-experience-call-v1` reproduced the
+release's final pooled counts (`quality-scores.json`) for all three providers
+and nine core cells; v2 changes only GPT Live's Experience. No call
+is `excluded`. Earlier drafts excluded twelve Korean calls with an
+unresponsive period. Those calls were replaced before the final export, and
+the final scores keep the remaining unresponsive-period calls scored.
+
+## Banking and entity packages
+
+The same export holds the release's banking and τ-Entity (intake) calls:
+`trajectories/<language>/banking/` and
+`trajectories/<language>/intake/regular/`. The entity frame scores one trial
+of the regular condition; `intake/channel-heavy/` and `intake/speech-heavy/`
+are extras and are never read. Select the frame with `--benchmark`:
+
+```bash
+tau2 submit prepare $R/leaderboard/<provider> --historical-voice-v2 \
+  --benchmark banking --metadata-file publication-metadata.json --output ./packages
+tau2 submit validate ./packages/<name> --historical-voice-v2 \
+  --results $R/leaderboard/<provider>
+```
+
+`--benchmark entity` builds `voice-v2-entity` the same way. The package
+directories are `<name>_banking` and `<name>_entity`, so all three packages of
+one agent can use the same metadata file. Neither frame is
+judged (see `JUDGED_BENCHMARKS`), so neither package has
+`benchmark-diagnostics.json` or `benchmark-quality.json`, and `--judges-root`
+is rejected. `validate` reads
+the frame from the package; a `--benchmark` given there must name the same one.
+
+These calls ran before the `voice-v2-banking` and `voice-v2-entity` manifests
+existed, so `info.benchmark` is null and the adapter derives the frame identity
+instead of reading it:
+
+- **Binding.** The adapter loads each released cell from this checkout
+  (`load_cell_language`). Its binding revision must equal the manifest's.
+  `info.language_artifacts` and every `info.language_tasks` entry must match
+  it on pack and domain revision, pack extension, call mode, task-loader
+  options and every `LanguageArtifactPins` field. The trials carry the
+  manifest's binding revision.
+- **Runtime rules.** `runtime_rules_sha256` hashes Python source files, and
+  some of those files changed after the release calls ran. The source diffs
+  between the run commits and v2.0.0 were checked and change no behavior for
+  these runs. English cells record no digest and must match exactly.
+  Non-English cells may record one of the three digests in
+  `ACCEPTED_RUNTIME_RULES`: two for banking_knowledge, one for intake. Any
+  other digest is rejected.
+- **Tasks.** Localized task IDs map to canonical IDs through
+  `language_tasks[*].canonical_task_id`. They must equal the frozen subset
+  (`banking_knowledge_97`, `intake_200`), with one trial-0 call per task, under
+  the regular speech, channel and speech-effects condition.
+- **Condition fingerprint.** No fingerprint was recorded, and today's
+  `encode_conditions` cannot parse the historical provider values. The adapter
+  takes the recorded `info` without the per-cell fields: provenance
+  (`git_commit`), the language binding checked above, the language-resolved
+  elicitation contract versions, and the provider language. It hashes that
+  with the evidence tag. Every cell must give the same value, so a package
+  cannot mix run settings. This value is not a matrix condition fingerprint
+  and is not comparable with one.
+
+The core checks are unchanged: the result index must match every simulation
+file, an unscored call must be a recorded infrastructure error, and the package
+must have one agent model and one caller model.
+
 ## Uploading
 
 Upload with the review tool, which validates again first:
@@ -77,7 +158,9 @@ python -m tau2.scripts.leaderboard.review_submission \
   --historical-voice-v2 --judges-root ... --judges-root ... [--upload]
 ```
 
-It copies `trajectories/<language>/<domain>/`, the export's `correction.json`
+It copies `trajectories/<language>/<domain>/` (for banking and entity, from
+the export's `banking/` and `intake/regular/` directories to
+`trajectories/<language>/banking_knowledge/` and `.../intake/`), the export's `correction.json`
 (as `source_correction.json`) and the verdicts (as
 `judges/<agent_provider>/<language>/`) under
 `s3://sierra-tau-bench-public/submissions/<name>/`, the layout of the uploaded

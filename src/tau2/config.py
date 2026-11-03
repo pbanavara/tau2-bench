@@ -9,6 +9,10 @@ DEFAULT_TASK_SUBSET_SEED = 42
 DEFAULT_MAX_CONCURRENCY = 3
 DEFAULT_JUDGE_PROCESSES = 1
 DEFAULT_JUDGE_CONCURRENCY = 1
+# Further attempts, in the same run, at judge units whose reply was incomplete
+# or invalid. Such failures are usually chance (a model looping until its output
+# limit) and succeed when asked again.
+DEFAULT_JUDGE_UNIT_RETRIES = 2
 DEFAULT_NUM_TRIALS = 1
 DEFAULT_SAVE_TO = None
 DEFAULT_LOG_LEVEL = "ERROR"
@@ -126,7 +130,8 @@ DEFAULT_SPEECH_EFFECTS_MODE = "regular"
 DEFAULT_AUDIO_NATIVE_AGENT_IMPLEMENTATION = "discrete_time_audio_native_agent"
 DEFAULT_AUDIO_NATIVE_USER_IMPLEMENTATION = "voice_streaming_user_simulator"
 DEFAULT_AUDIO_NATIVE_PROVIDER = (
-    "openai"  # overridable: openai, openai_live, gemini, xai, nova, qwen, livekit
+    "openai"  # overridable: openai, openai_live, gemini, xai, nova, qwen,
+    # avartha_pipecat, livekit
 )
 DEFAULT_TICK_DURATION_SECONDS = 0.20  # overridable
 DEFAULT_MAX_STEPS_SECONDS = 1200  # overridable
@@ -227,12 +232,31 @@ DEFAULT_QWEN_VOICE = "Tina"  # overridable; Qwen3.5-Omni-Realtime default voice
 DEFAULT_QWEN_INPUT_SAMPLE_RATE = 16000  # fixed, API-defined
 DEFAULT_QWEN_OUTPUT_SAMPLE_RATE = 24000  # fixed, API-defined
 
+# =============================================================================
+# PHONIC PROVIDER (overridable model; project via env var)
+# =============================================================================
+DEFAULT_PHONIC_API_BASE = "https://api.phonic.co/v1"
+DEFAULT_PHONIC_WS_BASE = "wss://api.phonic.co"
+DEFAULT_PHONIC_PROJECT = "main"  # overridable via PHONIC_PROJECT
+DEFAULT_PHONIC_MODEL = "phonic-1"  # overridable; sent as phonic_model
+DEFAULT_PHONIC_VOICE = "grant"
+
 # Explicit-language cascaded runs use the same speech models and voice in every
 # language. Flash supports language hints; Multilingual V2 does not.
 DEFAULT_CASCADED_MULTILINGUAL_STT_MODEL = "nova-3"
 DEFAULT_CASCADED_MULTILINGUAL_TTS_MODEL = "eleven_flash_v2_5"
 DEFAULT_CASCADED_MULTILINGUAL_VOICE_ID = "9BWtsMINqrJLrRacOk9x"  # Aria
 DEFAULT_CASCADED_TTS_SAMPLE_RATE = 24000
+
+# =============================================================================
+# AVARTHA (hosted agent over Pipecat SmallWebRTC)
+# =============================================================================
+DEFAULT_AVARTHA_MODEL = "avartha"  # recorded label; the URL selects the agent
+DEFAULT_AVARTHA_INPUT_SAMPLE_RATE = 16000  # caller audio track rate
+DEFAULT_AVARTHA_OUTPUT_SAMPLE_RATE = 24000  # agent audio is resampled to this
+DEFAULT_AVARTHA_BOOT_TIMEOUT_SECONDS = 45.0
+DEFAULT_AVARTHA_TOOL_REGISTRATION_TIMEOUT_SECONDS = 20.0
+DEFAULT_AVARTHA_BOOT_ATTEMPTS = 3
 
 # =============================================================================
 # PROVIDER REGISTRY (derived from above)
@@ -248,6 +272,8 @@ DEFAULT_AUDIO_NATIVE_MODELS = {
     "xai": DEFAULT_XAI_MODEL,
     "nova": DEFAULT_NOVA_MODEL,
     "qwen": DEFAULT_QWEN_MODEL,
+    "avartha_pipecat": DEFAULT_AVARTHA_MODEL,
+    "phonic": DEFAULT_PHONIC_MODEL,
     "livekit": "dummy",
 }
 
@@ -259,6 +285,8 @@ DEFAULT_AUDIO_NATIVE_REASONING_EFFORT: dict[str, str | None] = {
     "xai": "high",
     "nova": None,
     "qwen": None,
+    "avartha_pipecat": None,
+    "phonic": "high",  # intelligence level; low/medium/minimal map to standard
     "livekit": None,
 }
 
@@ -270,6 +298,8 @@ AUDIO_NATIVE_PROVIDER_TYPES = {
     "xai": "audio_native",
     "nova": "audio_native",
     "qwen": "audio_native",
+    "avartha_pipecat": "cascaded",
+    "phonic": "audio_native",
     "livekit": "cascaded",
 }
 
